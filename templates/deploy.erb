@@ -5,16 +5,76 @@ service: <%= service %>
 # Name of the container image.
 image: <%= image %>
 
+# How many old containers and images to retain after each deploy (Kamal's
+# own default is 5 when this is left out entirely).
+retain_containers: 5
+
 <%- end -%>
 # Deploy to these servers.
 servers:
   <%= web_role %>:
+    hosts:
 <%- web_hosts.each do |host| -%>
-    - <%= host %>
+      - <%= host %>
 <%- end -%>
-<%- if workers_hosts && !workers_hosts.empty? -%>
+<%- if web_cmd != "" -%>
+    cmd: <%= web_cmd %>
+<%- end -%>
+<%- if !workers_hosts.empty? -%>
   <%= workers_role %>:
+    hosts:
 <%- workers_hosts.each do |host| -%>
-    - <%= host %>
+      - <%= host %>
 <%- end -%>
+<%- if workers_cmd != "" -%>
+    cmd: <%= workers_cmd %>
+<%- end -%>
+<%- end -%>
+<%- if include_header -%>
+
+# Enable SSL auto certification via Let's Encrypt and allow for multiple apps on a single web server.
+# Remove this section (or replace ssl/host with just app_port) when terminating SSL at a load
+# balancer instead, and ensure you terminate SSL there.
+proxy:
+  ssl: true
+  host: app.example.com
+  # The port the application container is exposed on.
+  app_port: 3000
+  # Hit once a second (until deploy_timeout) to know when a new container is ready.
+  healthcheck:
+    path: /up
+    interval: 3
+    timeout: 3
+  # How long to wait for requests to complete before timing out. Kamal's own default is 30.
+  response_timeout: 30
+  buffering:
+    max_request_body: 40_000_000
+
+# Credentials for your image host.
+registry:
+  # Specify the registry server, if you're not using Docker Hub.
+  server: <your registry server>
+  username: <your registry username>
+  # Always use an access token rather than a real password (pulled from .kamal/secrets).
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+# Inject ENV variables into containers (secrets come from .kamal/secrets).
+# Remember to run `kamal env push` after making changes!
+env:
+  clear:
+    DB_USER: app
+  secret:
+    - DB_PASSWORD
+
+# Configure builder setup.
+builder:
+  arch: amd64
+  # Dockerfile to build from — Kamal's own default is "Dockerfile" when this is left out.
+  # dockerfile: Dockerfile
+  # Values are read from .kamal/secrets.
+  # secrets:
+  #   - SECRET1
+  #   - SECRET2
+
 <%- end -%>

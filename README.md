@@ -117,17 +117,27 @@ The same wizard can also generate `config/deploy.yml` itself — the
 `provision` script needs it anyway, since it reads `servers:` from that
 file at runtime to know which hosts to SSH into. Type an **Environment**
 (blank for the base config, or a name like `staging`/`production` for a
-`config/deploy.<env>.yml` override) plus **Role**/**Hosts** (comma-separated
-IPs or hostnames; a second role like `workers` is optional), and click
+`config/deploy.<env>.yml` override), **Role**/**Hosts** (comma-separated
+IPs or hostnames) plus an optional **Cmd** to override the container's
+default command, a second role like `workers` is optional too, and click
 **Generate deploy.yml**:
 
 - **Base config** (blank environment) — only offered when
-  `config/deploy.yml` doesn't exist yet. Renders `service`, `image`, and
-  `servers:` from the form, then appends the exact same
-  proxy/registry/builder/env/aliases/ssh/volumes/accessories guidance
-  `kamal init` ships (copied verbatim from the installed `kamal` gem's own
-  template — including its one genuinely-commented-out ERB example line,
-  which is deliberately *not* re-evaluated by this wizard's own ERB pass).
+  `config/deploy.yml` doesn't exist yet. Renders `service`, `image`,
+  `retain_containers`, and `servers:` from the form, then a full skeleton
+  for everything a real deployment typically needs — `proxy` (SSL, app
+  port, healthcheck, response timeout, request buffering), `registry`,
+  `env` (`clear`/`secret`), and `builder` — followed by the exact same
+  aliases/ssh/volumes/asset_path/boot/accessories guidance `kamal init`
+  ships (copied verbatim from the installed `kamal` gem's own template,
+  never re-evaluated by this wizard's own ERB pass — so its one
+  illustrative `<%= %>` example line stays literal, matching what `kamal
+  init` itself produces). Every value that isn't service/image/servers is
+  either a genuine Kamal default (`/up` healthcheck, `Dockerfile`, `arch:
+  amd64`, `retain_containers: 5`) or a generic placeholder straight from
+  Kamal's own configuration docs (`DB_USER`/`DB_PASSWORD` for `env`,
+  `<your registry server>` for `registry`) — never made-up, and never
+  copied from any one real project's actual values.
 - **Named environment** — always a minimal, `servers:`-only override, the
   normal Kamal pattern for adding a destination to an app that already has
   a base config. Safe to regenerate; only touches that one file.

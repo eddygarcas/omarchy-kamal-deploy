@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "eduard.kamal-deploy",
   "name": "Kamal Deploy",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": "Eduard G. Castelló",
   "license": "MIT",
   "homepage": "https://github.com/eddygarcas/omarchy-kamal-deploy",

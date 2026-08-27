@@ -1062,17 +1062,24 @@ Panel {
                       spacing: Style.space(8)
 
                       Column {
-                        width: (parent.width - parent.spacing) / 2
+                        width: (parent.width - 2 * parent.spacing) / 3
                         spacing: Style.space(2)
                         Text { text: "ROLE"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
                         TextField { id: deployWebRoleField; width: parent.width; text: "web"; foreground: root.foreground }
                       }
 
                       Column {
-                        width: (parent.width - parent.spacing) / 2
+                        width: (parent.width - 2 * parent.spacing) / 3
                         spacing: Style.space(2)
                         Text { text: "HOSTS"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
                         TextField { id: deployWebHostsField; width: parent.width; placeholderText: "10.0.1.10, 10.0.1.11"; foreground: root.foreground }
+                      }
+
+                      Column {
+                        width: (parent.width - 2 * parent.spacing) / 3
+                        spacing: Style.space(2)
+                        Text { text: "CMD (optional)"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
+                        TextField { id: deployWebCmdField; width: parent.width; placeholderText: "bin/rails s -p 3000"; foreground: root.foreground }
                       }
                     }
 
@@ -1081,17 +1088,24 @@ Panel {
                       spacing: Style.space(8)
 
                       Column {
-                        width: (parent.width - parent.spacing) / 2
+                        width: (parent.width - 2 * parent.spacing) / 3
                         spacing: Style.space(2)
                         Text { text: "ROLE (optional)"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
                         TextField { id: deployWorkersRoleField; width: parent.width; text: "workers"; foreground: root.foreground }
                       }
 
                       Column {
-                        width: (parent.width - parent.spacing) / 2
+                        width: (parent.width - 2 * parent.spacing) / 3
                         spacing: Style.space(2)
                         Text { text: "HOSTS (optional)"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
                         TextField { id: deployWorkersHostsField; width: parent.width; placeholderText: "10.0.2.10"; foreground: root.foreground }
+                      }
+
+                      Column {
+                        width: (parent.width - 2 * parent.spacing) / 3
+                        spacing: Style.space(2)
+                        Text { text: "CMD (optional)"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
+                        TextField { id: deployWorkersCmdField; width: parent.width; placeholderText: "bin/jobs"; foreground: root.foreground }
                       }
                     }
 
@@ -1118,8 +1132,10 @@ Panel {
                           image: deployImageField.text.trim() || deployServiceField.text.trim() || "my-app",
                           web_role: deployWebRoleField.text.trim() || "web",
                           web_hosts: deployConfigGroup.webHosts,
+                          web_cmd: deployWebCmdField.text.trim(),
                           workers_role: deployWorkersRoleField.text.trim() || "workers",
-                          workers_hosts: deployConfigGroup.workersHosts
+                          workers_hosts: deployConfigGroup.workersHosts,
+                          workers_cmd: deployWorkersCmdField.text.trim()
                         })
                       }
                     }

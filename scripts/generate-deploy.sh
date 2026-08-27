@@ -71,7 +71,7 @@ ruby -r erb -r json -e '
     exit 1
   end
   if opts["include_header"] && File.exist?(tail_path)
-    rendered = rendered.chomp("\n") + "\n\n" + File.read(tail_path)
+    rendered = rendered.rstrip + "\n\n" + File.read(tail_path)
   end
   File.write(out_file, rendered)
   puts out_file
