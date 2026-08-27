@@ -33,10 +33,13 @@ Click the bar icon (a compass) to open the panel:
 
 - **Search folders** — folders to scan for `config/deploy*.yml`. Type a path
   (`~` is expanded, relative paths are taken as relative to your home
-  folder) and hit **Add**, or click **Detect** to pick up common project
-  folders (`~/Code`, `~/Projects`, `~/dev`, `~/RubymineProjects`, …)
-  automatically. Saved in `shell.json` under `"eduard.kamal-deploy"`, so it
-  survives restarts. Click **↻** to rescan on demand. As a safety baseline,
+  folder) — press **Tab** to autocomplete it, terminal-style: one match
+  completes the folder name and appends `/` so the next Tab drills in;
+  several matches complete as far as they agree and show the rest as
+  clickable chips — then hit **Add**, or click **Detect** to pick up common
+  project folders (`~/Code`, `~/Projects`, `~/dev`, `~/RubymineProjects`,
+  …) automatically. Saved in `shell.json` under `"eduard.kamal-deploy"`, so
+  it survives restarts. Click **↻** to rescan on demand. As a safety baseline,
   every folder must resolve inside your home folder — `/etc`, `/`, or a
   `..`-traversal trick like `~/../../etc` are all rejected, both here and
   again by `discover.sh` itself (in case `shell.json` was hand-edited).
@@ -86,10 +89,11 @@ Click **+** next to the rescan button (↻) to open the wizard for setting up
 a brand-new server. It:
 
 1. **Target folder** — pick one of your discovered projects, or type a
-   custom path (for a project not scanned yet). Same home-folder safety
-   baseline as search folders — a path outside `~` is flagged in red and
-   blocks both the checks and Generate, and `generate-provision.sh` refuses
-   to write outside `$HOME` even if it's called some other way.
+   custom path (Tab to autocomplete, same as search folders). Same
+   home-folder safety baseline as search folders — a path outside `~` is
+   flagged in red and blocks both the checks and Generate, and
+   `generate-provision.sh` refuses to write outside `$HOME` even if it's
+   called some other way.
 2. **Checks** — runs `scripts/provision-check.sh` against that folder and
    shows: does `config/deploy.yml` (or `deploy.<env>.yml`) exist, does the
    `Gemfile` have the `kamal` and `net-ssh` gems, does `ssh-add -l` show a
@@ -168,6 +172,9 @@ to one app to generalize; add it back the same way if you use it.)
   Kamal already set up).
 - Runs `bash scripts/discover.sh <folders...>` to scan the filesystem and
   cache results at `$XDG_RUNTIME_DIR/eduard.kamal-deploy/targets.json`.
+- Every path field runs `bash scripts/complete-path.sh <partial>` (read-only
+  directory listing) on Tab, restricted to `$HOME` the same way every write
+  path in this plugin is.
 - Runs `bash scripts/run.sh <target> <action> [accessory]` inside your
   default terminal for every action — real `kamal`, `ruby`, and shell
   commands, with your real credentials and SSH keys. Review `scripts/run.sh`

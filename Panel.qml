@@ -48,6 +48,7 @@ Panel {
   readonly property string generateProvisionScript: pluginDir + "/scripts/generate-provision.sh"
   readonly property string generateDeployScript: pluginDir + "/scripts/generate-deploy.sh"
   readonly property string provisionCheckScript: pluginDir + "/scripts/provision-check.sh"
+  readonly property string completePathScript: pluginDir + "/scripts/complete-path.sh"
 
   property var projects: []
   property bool scanning: false
@@ -531,39 +532,44 @@ Panel {
               }
             }
 
-            Row {
+            Column {
               width: parent.width
-              spacing: Style.space(8)
+              spacing: Style.space(6)
 
-              TextField {
+              PathField {
                 id: pathField
-                width: parent.width - addBtn.implicitWidth - detectBtn.implicitWidth - Style.space(16)
+                width: parent.width
                 placeholderText: "~/Code"
                 foreground: root.foreground
                 onAccepted: { root.addSearchPath(text); text = "" }
               }
 
-              Button {
-                id: addBtn
-                text: "Add"
-                fontSize: Style.font.bodySmall
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                bordered: true
-                focusable: true
-                onClicked: { root.addSearchPath(pathField.text); pathField.text = "" }
-              }
+              Row {
+                width: parent.width
+                spacing: Style.space(8)
 
-              Button {
-                id: detectBtn
-                text: "Detect"
-                tooltipText: "Look for common project folders (Code, Projects, dev, …)"
-                fontSize: Style.font.bodySmall
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                bordered: true
-                focusable: true
-                onClicked: root.detectCommon()
+                Button {
+                  id: addBtn
+                  text: "Add"
+                  fontSize: Style.font.bodySmall
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  bordered: true
+                  focusable: true
+                  onClicked: { root.addSearchPath(pathField.text); pathField.text = "" }
+                }
+
+                Button {
+                  id: detectBtn
+                  text: "Detect"
+                  tooltipText: "Look for common project folders (Code, Projects, dev, …)"
+                  fontSize: Style.font.bodySmall
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  bordered: true
+                  focusable: true
+                  onClicked: root.detectCommon()
+                }
               }
             }
 
@@ -893,7 +899,7 @@ Panel {
                     }
                   }
 
-                  TextField {
+                  PathField {
                     width: parent.width
                     visible: root.wizardTargetMode === "custom"
                     placeholderText: "~/Code/new-app"
@@ -1504,6 +1510,115 @@ Panel {
           focusable: true
           enabled: modelData.enabled !== false
           onClicked: root.launchSelected(modelData.action)
+        }
+      }
+    }
+  }
+
+  // A folder-path TextField with terminal-style Tab completion: Tab lists
+  // matching subdirectories via scripts/complete-path.sh, completes to
+  // their longest common prefix (exact match on a single hit, plus a
+  // trailing "/" so the next Tab drills in), and shows the candidates as
+  // clickable chips when there's more than one. Drop-in replacement for a
+  // plain TextField — text/placeholderText/foreground/onAccepted/
+  // onTextChanged all behave the same.
+  component PathField: Column {
+    id: pathFieldRoot
+    property alias text: field.text
+    property alias placeholderText: field.placeholderText
+    property color foreground: root.foreground
+    signal accepted()
+
+    spacing: Style.space(4)
+
+    property var suggestions: []
+    property bool completingWithTilde: false
+
+    function requestComplete() {
+      if (completeProcess.running) return
+      pathFieldRoot.completingWithTilde = field.text.trim().indexOf("~") === 0
+      completeProcess.command = ["bash", root.completePathScript, field.text]
+      completeProcess.running = true
+    }
+
+    function toDisplayPath(absPath) {
+      if (pathFieldRoot.completingWithTilde && absPath.indexOf(root.home) === 0) {
+        return "~" + absPath.substring(root.home.length)
+      }
+      return absPath
+    }
+
+    function applyCompletion(matches) {
+      if (matches.length === 0) { pathFieldRoot.suggestions = []; return }
+      var display = matches.map(pathFieldRoot.toDisplayPath)
+      if (display.length === 1) {
+        field.text = display[0] + "/"
+        field.cursorPosition = field.text.length
+        pathFieldRoot.suggestions = []
+        return
+      }
+      var lcp = display[0]
+      for (var i = 1; i < display.length; i++) {
+        var b = display[i]
+        var j = 0
+        while (j < lcp.length && j < b.length && lcp[j] === b[j]) j++
+        lcp = lcp.substring(0, j)
+      }
+      field.text = lcp
+      field.cursorPosition = field.text.length
+      pathFieldRoot.suggestions = display
+    }
+
+    Process {
+      id: completeProcess
+      stdout: StdioCollector {
+        waitForEnd: true
+        onStreamFinished: {
+          var lines = String(text || "").split("\n")
+            .map(function(s) { return s.trim() })
+            .filter(function(s) { return s !== "" })
+          pathFieldRoot.applyCompletion(lines)
+        }
+      }
+    }
+
+    TextField {
+      id: field
+      width: parent.width
+      foreground: pathFieldRoot.foreground
+      onAccepted: pathFieldRoot.accepted()
+      onTextChanged: pathFieldRoot.suggestions = []
+
+      Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Tab) {
+          pathFieldRoot.requestComplete()
+          event.accepted = true
+        }
+      }
+    }
+
+    Flow {
+      width: parent.width
+      spacing: Style.space(4)
+      visible: pathFieldRoot.suggestions.length > 1
+
+      Repeater {
+        model: pathFieldRoot.suggestions
+        Button {
+          required property string modelData
+          text: modelData.substring(modelData.lastIndexOf("/") + 1)
+          tooltipText: modelData
+          fontSize: Style.font.caption
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          bordered: true
+          focusable: true
+          onClicked: {
+            field.text = modelData + "/"
+            field.cursorPosition = field.text.length
+            field.forceActiveFocus()
+            pathFieldRoot.suggestions = []
+          }
         }
       }
     }
