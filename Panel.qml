@@ -296,7 +296,7 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "⚓"
+    text: ""
     slotSize: Style.bar.iconSlot
     tooltipText: "Kamal Deploy"
     onPressed: function(b) { root.toggle() }
@@ -351,7 +351,7 @@ Panel {
 
             iconComponent: Component {
               Text {
-                text: "⚓"
+                text: ""
                 color: root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.display

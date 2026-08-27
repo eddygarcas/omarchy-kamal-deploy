@@ -29,7 +29,7 @@ omarchy plugin enable eduard.kamal-deploy
 
 ## What it does
 
-Click the bar icon (⚓) to open the panel:
+Click the bar icon (a compass) to open the panel:
 
 - **Search folders** — folders to scan for `config/deploy*.yml`. Type a path
   (`~` is expanded) and hit **Add**, or click **Detect** to pick up common
