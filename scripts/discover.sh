@@ -47,6 +47,15 @@ service_name() {
   [[ -n "$line" ]] && printf '%s' "$line"
 }
 
+language_of() {
+  local dir="$1"
+  if [[ -f "$dir/Gemfile" ]]; then echo "ruby"; return; fi
+  if [[ -f "$dir/go.mod" ]]; then echo "go"; return; fi
+  if [[ -f "$dir/tsconfig.json" ]]; then echo "typescript"; return; fi
+  if [[ -f "$dir/package.json" ]]; then echo "node"; return; fi
+  echo "generic"
+}
+
 accessories_in() {
   local f="$1"
   [[ -f "$f" ]] || return 0
@@ -120,8 +129,9 @@ for project_dir in "${!project_name_for[@]}"; do
   pid="$(project_id "$project_dir")"
   has_provision=false
   [[ -f "$project_dir/provision" ]] && has_provision=true
-  jq -n --arg pid "$pid" --arg name "${project_name_for[$project_dir]}" --argjson hasProvision "$has_provision" \
-    '{projectId:$pid, name:$name, hasProvision:$hasProvision}'
+  language="$(language_of "$project_dir")"
+  jq -n --arg pid "$pid" --arg name "${project_name_for[$project_dir]}" --argjson hasProvision "$has_provision" --arg language "$language" \
+    '{projectId:$pid, name:$name, hasProvision:$hasProvision, language:$language}'
 done > "$names_json"
 
 result="$(jq -n \
@@ -141,6 +151,9 @@ result="$(jq -n \
           ),
           hasProvision: (
             ($names | map(select(.projectId == $first.projectId)) | .[0].hasProvision) // false
+          ),
+          language: (
+            ($names | map(select(.projectId == $first.projectId)) | .[0].language) // "generic"
           ),
           accessories: [$accs[] | select(.projectId == $first.projectId) | .accessory],
           environments: (

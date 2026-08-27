@@ -37,8 +37,13 @@ Click the bar icon (a compass) to open the panel:
   …) automatically. Saved in `shell.json` under `"eduard.kamal-deploy"`, so
   it survives restarts. Click **↻** to rescan on demand.
 - **Checklist** — one section per project (named from `service:` in its base
-  `deploy.yml`, or the folder name), one checkbox per destination (`default`
-  for `config/deploy.yml`, `<env>` for each `config/deploy.<env>.yml`).
+  `deploy.yml`, or the folder name, with a small language badge — **RB**
+  for Ruby (`Gemfile`), **GO** for Go (`go.mod`), **TS** for TypeScript
+  (`tsconfig.json`), **JS** for Node (`package.json`), a plain dot for
+  anything else — Ruby wins if a project has both a `Gemfile` and a
+  `package.json`, e.g. a Rails app with a JS asset pipeline), one checkbox
+  per destination (`default` for `config/deploy.yml`, `<env>` for each
+  `config/deploy.<env>.yml`).
   **Select all** / **Clear** toggle everything at once. As soon as anything
   is checked, a **SELECTED (N)** chip row appears (click a chip's ✕ to
   uncheck just that one) followed by the shared action bar:

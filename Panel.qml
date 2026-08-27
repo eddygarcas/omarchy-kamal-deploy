@@ -226,6 +226,19 @@ Panel {
     Quickshell.execDetached(args)
   }
 
+  // Fixed, theme-independent brand colors — like GitHub's per-language dots,
+  // these stay recognizable regardless of the active Omarchy theme.
+  readonly property var languageBadges: ({
+    ruby: { label: "RB", color: "#CC342D" },
+    go: { label: "GO", color: "#00ADD8" },
+    typescript: { label: "TS", color: "#3178C6" },
+    node: { label: "JS", color: "#68A063" }
+  })
+
+  function languageBadge(lang) {
+    return root.languageBadges[lang] || { label: "•", color: root.dim }
+  }
+
   onOpenedChanged: if (opened) {
     if (root.searchPaths.length > 0 && root.projects.length === 0) root.rescan()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
@@ -1035,6 +1048,7 @@ Panel {
   component ProjectBlock: Column {
     id: block
     property var project: ({})
+    readonly property var badge: root.languageBadge(block.project.language)
 
     spacing: Style.space(8)
 
@@ -1042,11 +1056,39 @@ Panel {
       width: parent.width
       spacing: Style.space(1)
 
-      PanelSectionHeader {
+      Row {
         width: parent.width
-        text: String(block.project.name || "project").toUpperCase()
-        foreground: root.foreground
-        fontFamily: root.fontFamily
+        spacing: Style.space(6)
+
+        Rectangle {
+          id: langChip
+          // badge.color may be a hex string or an existing color value
+          // (root.dim, for the generic fallback) — routing it through a
+          // `color`-typed property normalizes either into one we can tint.
+          property color tint: block.badge.color
+          width: langLabel.implicitWidth + Style.space(8)
+          height: langLabel.implicitHeight + Style.space(3)
+          radius: Style.cornerRadius
+          color: Qt.rgba(tint.r, tint.g, tint.b, 0.18)
+          anchors.verticalCenter: parent.verticalCenter
+
+          Text {
+            id: langLabel
+            anchors.centerIn: parent
+            text: block.badge.label
+            color: block.badge.color
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+        }
+
+        PanelSectionHeader {
+          anchors.verticalCenter: parent.verticalCenter
+          text: String(block.project.name || "project").toUpperCase()
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+        }
       }
 
       Text {
