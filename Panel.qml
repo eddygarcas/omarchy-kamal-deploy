@@ -6,11 +6,14 @@ import qs.Commons
 import qs.Ui
 
 // Kamal Deploy — finds config/deploy.yml + config/deploy.<env>.yml files
-// under your configured project folders and turns each one into a bar-panel
-// task-list row. Clicking a row drops down the actions from the user's own
-// kamal_menu() shell function (provision / setup / deploy / accessories /
-// logs / console / rack_attack / shell), plus a few more pulled from the
-// Kamal CLI (rollback, details, lock, audit, restart).
+// under your configured project folders and turns each one into a checklist
+// row. Since most Kamal actions are the same shape for any destination,
+// checking one or more rows (across one or many projects) reveals a shared
+// action bar at the bottom — the actions from the user's own kamal_menu()
+// shell function (provision / setup / deploy / accessories / logs / console
+// / rack_attack / shell), plus a few more pulled from the Kamal CLI
+// (rollback, details, lock, audit, restart) — and clicking one runs it
+// against every checked target at once.
 //
 // Every action runs via `omarchy-launch-or-focus-tui`, which opens (or
 // refocuses) the system's default terminal running scripts/run.sh — real
@@ -46,7 +49,72 @@ Panel {
   property var projects: []
   property bool scanning: false
   property string lastScanError: ""
-  property string expandedTargetId: ""
+
+  // ---------------------------------------------------------------- selection
+  // Multi-select: every environment across every project is a checkbox, and
+  // the same batch of Kamal actions at the bottom of the panel runs against
+  // whichever ones are checked — one terminal per selected target per click,
+  // since each target needs its own `kamal ... -d <env>` in its own project
+  // directory.
+  property var selectedTargetIds: ({})
+
+  readonly property var targetIndex: {
+    var idx = {}
+    for (var i = 0; i < root.projects.length; i++) {
+      var p = root.projects[i]
+      var envs = p.environments || []
+      for (var j = 0; j < envs.length; j++) idx[envs[j].targetId] = { project: p, env: envs[j] }
+    }
+    return idx
+  }
+
+  readonly property var selectedIds: {
+    var out = []
+    for (var k in root.selectedTargetIds) if (root.selectedTargetIds[k] && root.targetIndex[k]) out.push(k)
+    return out
+  }
+  readonly property int selectedCount: root.selectedIds.length
+  readonly property bool selectedHasProvision: root.selectedCount > 0 && root.selectedIds.every(function(id) {
+    var e = root.targetIndex[id]
+    return e && e.project && e.project.hasProvision
+  })
+  readonly property var selectedAccessories: {
+    var set = {}
+    root.selectedIds.forEach(function(id) {
+      var e = root.targetIndex[id]
+      if (e && e.project && Array.isArray(e.project.accessories)) e.project.accessories.forEach(function(a) { set[a] = true })
+    })
+    return Object.keys(set)
+  }
+
+  function toggleSelected(targetId) {
+    var next = {}
+    for (var k in root.selectedTargetIds) next[k] = root.selectedTargetIds[k]
+    if (next[targetId]) delete next[targetId]
+    else next[targetId] = true
+    root.selectedTargetIds = next
+  }
+
+  function selectAllVisible() {
+    var next = {}
+    root.projects.forEach(function(p) { (p.environments || []).forEach(function(e) { next[e.targetId] = true }) })
+    root.selectedTargetIds = next
+  }
+
+  function clearSelection() {
+    root.selectedTargetIds = {}
+  }
+
+  function pruneSelection() {
+    var idx = root.targetIndex
+    var next = {}
+    for (var k in root.selectedTargetIds) if (idx[k]) next[k] = true
+    root.selectedTargetIds = next
+  }
+
+  function launchSelected(action, extra) {
+    root.selectedIds.forEach(function(id) { root.launch(id, action, extra) })
+  }
 
   // ---------------------------------------------------------- provision wizard
   property bool wizardOpen: false
@@ -145,13 +213,10 @@ Panel {
     try {
       var parsed = JSON.parse(String(raw || "[]"))
       root.projects = Array.isArray(parsed) ? parsed : []
+      root.pruneSelection()
     } catch (e) {
       root.lastScanError = "Could not parse scan results."
     }
-  }
-
-  function toggleTarget(targetId) {
-    root.expandedTargetId = (root.expandedTargetId === targetId) ? "" : targetId
   }
 
   function launch(targetId, action, extra) {
@@ -403,6 +468,41 @@ Panel {
 
           PanelSeparator { foreground: root.foreground }
 
+          Row {
+            width: parent.width
+            spacing: Style.space(8)
+            visible: root.projects.length > 0
+
+            Button {
+              text: "Select all"
+              fontSize: Style.font.bodySmall
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              bordered: true
+              focusable: true
+              onClicked: root.selectAllVisible()
+            }
+
+            Button {
+              text: "Clear"
+              fontSize: Style.font.bodySmall
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              bordered: true
+              focusable: true
+              enabled: root.selectedCount > 0
+              onClicked: root.clearSelection()
+            }
+
+            Text {
+              text: root.selectedCount + " selected"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              anchors.verticalCenter: parent.verticalCenter
+            }
+          }
+
           Column {
             width: parent.width
             spacing: Style.space(16)
@@ -411,6 +511,141 @@ Panel {
             Repeater {
               model: root.projects
               ProjectBlock { width: column.width; project: modelData }
+            }
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(14)
+            visible: root.selectedCount > 0
+
+            PanelSeparator { foreground: root.foreground }
+
+            Column {
+              width: parent.width
+              spacing: Style.space(8)
+
+              PanelSectionHeader { text: "SELECTED (" + root.selectedCount + ")"; foreground: root.foreground; fontFamily: root.fontFamily }
+
+              Flow {
+                width: parent.width
+                spacing: Style.space(6)
+
+                Repeater {
+                  model: root.selectedIds
+                  Button {
+                    property string tid: modelData
+                    readonly property var entry: root.targetIndex[tid]
+                    text: (entry ? (entry.project.name + " / " + (entry.env.label || "default")) : tid) + "  ✕"
+                    fontSize: Style.font.caption
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    bordered: true
+                    focusable: true
+                    onClicked: root.toggleSelected(tid)
+                  }
+                }
+              }
+            }
+
+            ActionGroup {
+              width: parent.width
+              heading: "DEPLOY"
+              actions: [
+                { label: "Provision", action: "provision", enabled: root.selectedHasProvision,
+                  disabledReason: "Not every selected target has a provision script — run the Provision Wizard for the ones that don't." },
+                { label: "Setup", action: "setup" },
+                { label: "Deploy", action: "deploy" },
+                { label: "Rollback", action: "rollback" }
+              ]
+            }
+
+            ActionGroup {
+              width: parent.width
+              heading: "APPLICATION"
+              actions: [
+                { label: "Tail logs", action: "logs" },
+                { label: "Rails console", action: "console" },
+                { label: "Bash shell", action: "shell" },
+                { label: "Rack attack status", action: "rack_attack" },
+                { label: "Restart", action: "restart" },
+                { label: "Details", action: "details" }
+              ]
+            }
+
+            ActionGroup {
+              width: parent.width
+              heading: "OPERATIONS"
+              actions: [
+                { label: "Lock status", action: "lock_status" },
+                { label: "Release lock", action: "lock_release" },
+                { label: "Audit log", action: "audit" }
+              ]
+            }
+
+            Column {
+              id: bulkAccessoryGroup
+              width: parent.width
+              spacing: Style.space(8)
+
+              readonly property string accessoryValue: bulkAccessoryField.text.trim()
+              readonly property bool accessoryValid: accessoryValue !== "" && !/\s/.test(accessoryValue)
+
+              PanelSectionHeader { text: "ACCESSORIES"; foreground: root.foreground; fontFamily: root.fontFamily }
+
+              Text {
+                visible: root.selectedAccessories.length > 0
+                width: parent.width
+                text: "Known: " + root.selectedAccessories.join(", ")
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+              }
+
+              TextField {
+                id: bulkAccessoryField
+                width: parent.width
+                placeholderText: root.selectedAccessories.length > 0 ? root.selectedAccessories[0] : "accessory name"
+                foreground: root.foreground
+              }
+
+              Text {
+                visible: bulkAccessoryField.text.trim() !== "" && !bulkAccessoryGroup.accessoryValid
+                width: parent.width
+                text: "Accessory name can't contain spaces."
+                color: root.urgent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              Flow {
+                width: parent.width
+                spacing: Style.space(6)
+
+                Repeater {
+                  model: [
+                    { label: "Boot", action: "accessory_boot" },
+                    { label: "Reboot", action: "accessory_reboot" },
+                    { label: "Stop", action: "accessory_stop" },
+                    { label: "Restart", action: "accessory_restart" },
+                    { label: "Logs", action: "accessory_logs" },
+                    { label: "Remove", action: "accessory_remove" }
+                  ]
+
+                  Button {
+                    required property var modelData
+                    text: modelData.label
+                    fontSize: Style.font.bodySmall
+                    foreground: modelData.action === "accessory_remove" ? root.urgent : root.foreground
+                    fontFamily: root.fontFamily
+                    bordered: true
+                    focusable: true
+                    enabled: bulkAccessoryGroup.accessoryValid
+                    onClicked: root.launchSelected(modelData.action, bulkAccessoryGroup.accessoryValue)
+                  }
+                }
+              }
             }
           }
 
@@ -826,160 +1061,73 @@ Panel {
 
     Column {
       width: parent.width
-      spacing: Style.space(6)
+      spacing: Style.space(4)
 
       Repeater {
         model: block.project.environments || []
-        TargetRow {
-          width: parent.width
-          env: modelData
-          accessories: block.project.accessories || []
-          hasProvision: !!block.project.hasProvision
-        }
+        TargetRow { width: parent.width; env: modelData }
       }
     }
   }
 
-  component TargetRow: Column {
+  // A checkbox row. All the actual Kamal actions live in the shared bottom
+  // bar and run against every checked row at once — see selectedIds /
+  // launchSelected() on root.
+  component TargetRow: Item {
     id: row
     property var env: ({})
-    property var accessories: []
-    property bool hasProvision: false
 
     readonly property string targetId: String(row.env.targetId || "")
-    readonly property bool expanded: root.expandedTargetId === row.targetId
+    readonly property bool selected: !!root.selectedTargetIds[row.targetId]
     readonly property string envLabel: row.env.label || "default"
 
-    spacing: Style.space(8)
+    implicitHeight: Math.max(checkbox.height, label.implicitHeight) + Style.space(6)
 
-    Button {
-      width: parent.width
-      leftAlign: true
-      text: (row.expanded ? "󰅀  " : "󰅂  ") + row.envLabel
-      fontSize: Style.font.body
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      bordered: true
-      focusable: true
-      active: row.expanded
-      onClicked: root.toggleTarget(row.targetId)
+    BorderSurface {
+      id: checkbox
+      width: Style.space(18)
+      height: Style.space(18)
+      radius: Math.max(2, Style.cornerRadius / 2)
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      color: row.selected ? Style.selectedFillFor(root.foreground, Color.accent) : "transparent"
+      borderSpec: row.selected
+        ? Border.controlSpec("selected", root.foreground, Color.accent)
+        : Border.controlSpec("normal", root.foreground, Color.accent)
+
+      Text {
+        anchors.centerIn: parent
+        visible: row.selected
+        text: "✓"
+        color: Style.selectedStateColor(root.foreground, Color.accent)
+        font.family: root.fontFamily
+        font.pixelSize: Math.round(checkbox.height * 0.85)
+        font.bold: true
+      }
     }
 
-    Column {
-      width: parent.width
-      spacing: Style.space(10)
-      visible: row.expanded
-      leftPadding: Style.space(6)
+    Text {
+      id: label
+      anchors.left: checkbox.right
+      anchors.leftMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+      text: row.envLabel
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.body
+    }
 
-      ActionGroup {
-        width: parent.width - parent.leftPadding
-        heading: "DEPLOY"
-        actions: [
-          { label: "Provision", action: "provision", enabled: row.hasProvision,
-            disabledReason: "No provision script — run the Provision Wizard for this project first." },
-          { label: "Setup", action: "setup" },
-          { label: "Deploy", action: "deploy" },
-          { label: "Rollback", action: "rollback" }
-        ]
-        targetId: row.targetId
-      }
-
-      ActionGroup {
-        width: parent.width - parent.leftPadding
-        heading: "APPLICATION"
-        actions: [
-          { label: "Tail logs", action: "logs" },
-          { label: "Rails console", action: "console" },
-          { label: "Bash shell", action: "shell" },
-          { label: "Rack attack status", action: "rack_attack" },
-          { label: "Restart", action: "restart" },
-          { label: "Details", action: "details" }
-        ]
-        targetId: row.targetId
-      }
-
-      ActionGroup {
-        width: parent.width - parent.leftPadding
-        heading: "OPERATIONS"
-        actions: [
-          { label: "Lock status", action: "lock_status" },
-          { label: "Release lock", action: "lock_release" },
-          { label: "Audit log", action: "audit" }
-        ]
-        targetId: row.targetId
-      }
-
-      Column {
-        id: accessoryGroup
-        width: parent.width - parent.leftPadding
-        spacing: Style.space(8)
-
-        readonly property string accessoryValue: accessoryField.text.trim()
-        readonly property bool accessoryValid: accessoryValue !== "" && !/\s/.test(accessoryValue)
-
-        PanelSectionHeader { text: "ACCESSORIES"; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption }
-
-        Text {
-          visible: row.accessories.length > 0
-          width: parent.width
-          text: "Known: " + row.accessories.join(", ")
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          wrapMode: Text.WordWrap
-        }
-
-        TextField {
-          id: accessoryField
-          width: parent.width
-          placeholderText: row.accessories.length > 0 ? row.accessories[0] : "accessory name"
-          foreground: root.foreground
-        }
-
-        Text {
-          visible: accessoryField.text.trim() !== "" && !accessoryGroup.accessoryValid
-          width: parent.width
-          text: "Accessory name can't contain spaces."
-          color: root.urgent
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-        }
-
-        Flow {
-          width: parent.width
-          spacing: Style.space(6)
-
-          Repeater {
-            model: [
-              { label: "Boot", action: "accessory_boot" },
-              { label: "Reboot", action: "accessory_reboot" },
-              { label: "Stop", action: "accessory_stop" },
-              { label: "Restart", action: "accessory_restart" },
-              { label: "Logs", action: "accessory_logs" },
-              { label: "Remove", action: "accessory_remove" }
-            ]
-
-            Button {
-              required property var modelData
-              text: modelData.label
-              fontSize: Style.font.bodySmall
-              foreground: modelData.action === "accessory_remove" ? root.urgent : root.foreground
-              fontFamily: root.fontFamily
-              bordered: true
-              focusable: true
-              enabled: accessoryGroup.accessoryValid
-              onClicked: root.launch(row.targetId, modelData.action, accessoryGroup.accessoryValue)
-            }
-          }
-        }
-      }
+    MouseArea {
+      anchors.fill: parent
+      cursorShape: Qt.PointingHandCursor
+      onClicked: root.toggleSelected(row.targetId)
     }
   }
 
+  // One row of action chips, run against every currently-selected target.
   component ActionGroup: Column {
     id: group
     property string heading: ""
-    property string targetId: ""
     property var actions: []
 
     spacing: Style.space(6)
@@ -1003,7 +1151,7 @@ Panel {
           bordered: true
           focusable: true
           enabled: modelData.enabled !== false
-          onClicked: root.launch(group.targetId, modelData.action)
+          onClicked: root.launchSelected(modelData.action)
         }
       }
     }

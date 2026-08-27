@@ -2,10 +2,12 @@
 
 An [Omarchy](https://omarchy.org/) shell plugin that turns every
 [Kamal](https://kamal-deploy.org/) project on your machine into a bar-panel
-task list. It finds `config/deploy.yml` and `config/deploy.<env>.yml` files
-under folders you point it at, and lets you run setup / deploy / logs /
-console / accessory / lock actions against any of them — each one opening
-(or refocusing) your default terminal so you never have to open one by hand.
+checklist. It finds `config/deploy.yml` and `config/deploy.<env>.yml` files
+under folders you point it at, and lets you check any number of
+destinations — across one project or several — then run setup / deploy /
+logs / console / accessory / lock actions against all of them at once, each
+one opening (or refocusing) your default terminal so you never have to open
+one by hand.
 
 ## Why
 
@@ -34,33 +36,41 @@ Click the bar icon (⚓) to open the panel:
   project folders (`~/Code`, `~/Projects`, `~/dev`, `~/RubymineProjects`,
   …) automatically. Saved in `shell.json` under `"eduard.kamal-deploy"`, so
   it survives restarts. Click **↻** to rescan on demand.
-- **Task list** — one section per project (named from `service:` in its base
-  `deploy.yml`, or the folder name), one row per destination (`default` for
-  `config/deploy.yml`, `<env>` for each `config/deploy.<env>.yml`). Click a
-  row to drop down its actions:
-  - **Deploy** — Provision (`ruby provision <env>` — only enabled once a
-    `provision` script exists in that project, see **Provision Wizard**
-    below), Setup (`kamal setup -v`), Deploy (`kamal lock release` then
-    `kamal deploy -v`), Rollback (`kamal rollback`).
+- **Checklist** — one section per project (named from `service:` in its base
+  `deploy.yml`, or the folder name), one checkbox per destination (`default`
+  for `config/deploy.yml`, `<env>` for each `config/deploy.<env>.yml`).
+  **Select all** / **Clear** toggle everything at once. As soon as anything
+  is checked, a **SELECTED (N)** chip row appears (click a chip's ✕ to
+  uncheck just that one) followed by the shared action bar:
+  - **Deploy** — Provision (`ruby provision <env>` — enabled only once
+    *every* selected target's project has a `provision` script, see
+    **Provision Wizard** below), Setup (`kamal setup -v`), Deploy (`kamal
+    lock release` then `kamal deploy -v`), Rollback (`kamal rollback`).
   - **Application** — Tail logs (`kamal app logs -f`), Rails console (`kamal
     app exec -i 'bin/rails console'`), Bash shell (`kamal app exec -i
     bash`), Rack attack status (`kamal app exec --reuse 'bin/rails
     rack_attack:status'`), Restart (`kamal app restart`), Details (`kamal
     details`).
   - **Operations** — Lock status, Release lock, Audit log.
-  - **Accessories** — known accessory names (parsed from the project's
-    `accessories:` block) are listed as a hint; type one into the field and
-    Boot / Reboot / Stop / Restart / Logs / Remove become available (Reboot
-    releases the lock first, same as the original script).
+  - **Accessories** — known accessory names (parsed from every selected
+    project's `accessories:` block) are listed as a hint; type one into the
+    field and Boot / Reboot / Stop / Restart / Logs / Remove become
+    available (Reboot releases the lock first, same as the original
+    script).
+
+  Clicking any action runs it once per checked target — a `staging` +
+  `production` selection opens two terminals for **Deploy**, one per
+  destination, since each needs its own `kamal ... -d <env>` in its own
+  project directory; they can't be merged into a single command.
 
 Every action shells out to `scripts/run.sh`, opened via
 `omarchy-launch-or-focus-tui` — your actual default terminal (foot, kitty,
 alacritty, ghostty, whatever `xdg-terminal-exec` resolves to), with a stable
-per-target-per-action window so clicking the same action twice refocuses the
-running one instead of piling up windows. That's what makes `kamal app exec
--i`, `rollback`'s interactive prompts, SSH passphrase prompts, and `logs -f`
-work correctly — they need a real TTY, which a fake in-panel console
-couldn't give them.
+per-target-per-action window so clicking the same action twice on the same
+target refocuses the running one instead of piling up windows. That's what
+makes `kamal app exec -i`, `rollback`'s interactive prompts, SSH passphrase
+prompts, and `logs -f` work correctly — they need a real TTY, which a fake
+in-panel console couldn't give them.
 
 ## Provision Wizard
 
