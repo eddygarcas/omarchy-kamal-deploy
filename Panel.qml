@@ -306,16 +306,19 @@ Panel {
   }
 
   // Fixed, theme-independent brand colors — like GitHub's per-language dots,
-  // these stay recognizable regardless of the active Omarchy theme.
+  // these stay recognizable regardless of the active Omarchy theme. Icons
+  // are Seti-UI glyphs from the Nerd Font (v3 codepoints, confirmed against
+  // the installed JetBrainsMono Nerd Font's own charset coverage — not
+  // guessed — so none of these render as tofu).
   readonly property var languageBadges: ({
-    ruby: { label: "RB", color: "#CC342D" },
-    go: { label: "GO", color: "#00ADD8" },
-    typescript: { label: "TS", color: "#3178C6" },
-    node: { label: "JS", color: "#68A063" }
+    ruby: { icon: "", color: "#CC342D" },
+    go: { icon: "", color: "#00ADD8" },
+    typescript: { icon: "", color: "#3178C6" },
+    node: { icon: "", color: "#68A063" }
   })
 
   function languageBadge(lang) {
-    return root.languageBadges[lang] || { label: "•", color: root.dim }
+    return root.languageBadges[lang] || { icon: "", color: root.dim }
   }
 
   onOpenedChanged: if (opened) {
@@ -1381,20 +1384,19 @@ Panel {
           // (root.dim, for the generic fallback) — routing it through a
           // `color`-typed property normalizes either into one we can tint.
           property color tint: block.badge.color
-          width: langLabel.implicitWidth + Style.space(8)
-          height: langLabel.implicitHeight + Style.space(3)
-          radius: Style.cornerRadius
+          width: Style.space(20)
+          height: Style.space(20)
+          radius: width / 2
           color: Qt.rgba(tint.r, tint.g, tint.b, 0.18)
           anchors.verticalCenter: parent.verticalCenter
 
           Text {
-            id: langLabel
+            id: langIcon
             anchors.centerIn: parent
-            text: block.badge.label
+            text: block.badge.icon
             color: block.badge.color
             font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            font.bold: true
+            font.pixelSize: Style.font.body
           }
         }
 

@@ -44,12 +44,14 @@ Click the bar icon (a compass) to open the panel:
   `..`-traversal trick like `~/../../etc` are all rejected, both here and
   again by `discover.sh` itself (in case `shell.json` was hand-edited).
 - **Checklist** — one section per project (named from `service:` in its base
-  `deploy.yml`, or the folder name, with a small language badge — **RB**
-  for Ruby (`Gemfile`), **GO** for Go (`go.mod`), **TS** for TypeScript
-  (`tsconfig.json`), **JS** for Node (`package.json`), a plain dot for
-  anything else — Ruby wins if a project has both a `Gemfile` and a
-  `package.json`, e.g. a Rails app with a JS asset pipeline), one checkbox
-  per destination (`default` for `config/deploy.yml`, `<env>` for each
+  `deploy.yml`, or the folder name, with a small language icon — a Nerd Font
+  glyph for Ruby (any `*.rb` file or a `Gemfile`/`Rakefile` in the project
+  root), Go (`*.go` or `go.mod`), TypeScript (`*.ts`/`*.tsx` or
+  `tsconfig.json`), or Node (`*.js`/`*.jsx` or `package.json`), a plain dot
+  for anything else — checked in that order, so Ruby wins if a project has
+  both a `Gemfile` and a `package.json`, e.g. a Rails app with a JS asset
+  pipeline), one checkbox per destination (`default` for `config/deploy.yml`,
+  `<env>` for each
   `config/deploy.<env>.yml`).
   **Select all** / **Clear** toggle everything at once. As soon as anything
   is checked, a **SELECTED (N)** chip row appears (click a chip's ✕ to

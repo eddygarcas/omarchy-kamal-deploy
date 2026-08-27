@@ -62,10 +62,24 @@ service_name() {
 
 language_of() {
   local dir="$1"
-  if [[ -f "$dir/Gemfile" ]]; then echo "ruby"; return; fi
-  if [[ -f "$dir/go.mod" ]]; then echo "go"; return; fi
-  if [[ -f "$dir/tsconfig.json" ]]; then echo "typescript"; return; fi
-  if [[ -f "$dir/package.json" ]]; then echo "node"; return; fi
+  # nullglob only prunes patterns that actually contain a wildcard and
+  # don't match anything — a literal filename like "Gemfile" would stay
+  # in the array (and always count as "found") even when the file isn't
+  # there, so marker files are checked separately with plain -f tests.
+  shopt -s nullglob
+  local rb=( "$dir"/*.rb )
+  local go=( "$dir"/*.go )
+  local ts=( "$dir"/*.ts "$dir"/*.tsx )
+  local js=( "$dir"/*.js "$dir"/*.jsx )
+  shopt -u nullglob
+
+  # Extension/marker files found directly in the project root decide the
+  # badge — checked in this order so a Rails app with a JS asset pipeline
+  # (Gemfile + package.json) still reads as Ruby, not Node.
+  if (( ${#rb[@]} > 0 )) || [[ -f "$dir/Gemfile" || -f "$dir/Rakefile" ]]; then echo "ruby"; return; fi
+  if (( ${#go[@]} > 0 )) || [[ -f "$dir/go.mod" ]]; then echo "go"; return; fi
+  if (( ${#ts[@]} > 0 )) || [[ -f "$dir/tsconfig.json" ]]; then echo "typescript"; return; fi
+  if (( ${#js[@]} > 0 )) || [[ -f "$dir/package.json" ]]; then echo "node"; return; fi
   echo "generic"
 }
 
