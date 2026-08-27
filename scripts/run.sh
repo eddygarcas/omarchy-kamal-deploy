@@ -5,7 +5,7 @@
 # (which might contain spaces) through the launcher's word-splitting.
 set -uo pipefail
 
-CACHE_FILE="${XDG_RUNTIME_DIR:-/tmp}/eduard.kamal-deploy/targets.json"
+source "$(dirname "${BASH_SOURCE[0]}")/cache-dir.sh"
 TARGET_ID="${1:-}"
 ACTION="${2:-}"
 EXTRA="${3:-}"
@@ -32,6 +32,7 @@ if [[ -z "$TARGET_ID" || -z "$ACTION" ]]; then
   pause_exit 1
 fi
 
+cache_dir_is_safe || die "Cache directory unavailable or unsafe: $CACHE_DIR — rescan the Kamal Deploy panel."
 [[ -f "$CACHE_FILE" ]] || die "No Kamal targets discovered yet — open the Kamal Deploy panel first."
 
 IFS=$'\x01' read -r PROJECT_DIR PROJECT_NAME ENV LABEL <<<"$(jq -r --arg id "$TARGET_ID" '

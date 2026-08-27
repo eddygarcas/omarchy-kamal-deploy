@@ -79,7 +79,10 @@ once it's done (see **Customizing the commands** if you've been editing
     project's `accessories:` block) are listed as a hint; type one into the
     field and Boot / Reboot / Stop / Restart / Logs / Remove become
     available (Reboot releases the lock first, same as the original
-    script).
+    script). Letters, numbers, `-` and `_` only — Logs opens a real
+    terminal via a launcher that reassembles its arguments through a
+    shell, so this is enforced strictly rather than just rejecting
+    whitespace.
 
   Clicking any action runs it once per checked target — a `staging` +
   `production` selection queues (or opens) two of whatever that action
@@ -147,8 +150,9 @@ different choices; it always overwrites, never merges.
 The same wizard can also generate `config/deploy.yml` itself — the
 `provision` script needs it anyway, since it reads `servers:` from that
 file at runtime to know which hosts to SSH into. Type an **Environment**
-(blank for the base config, or a name like `staging`/`production` for a
-`config/deploy.<env>.yml` override), **Role**/**Hosts** (comma-separated
+(blank for the base config, or a name like `staging`/`production` — letters,
+numbers, `-` and `_` only, since it becomes part of the generated
+filename — for a `config/deploy.<env>.yml` override), **Role**/**Hosts** (comma-separated
 IPs or hostnames) plus an optional **Cmd** to override the container's
 default command, a second role like `workers` is optional too, and click
 **Generate deploy.yml**:
@@ -201,7 +205,11 @@ to one app to generalize; add it back the same way if you use it.)
   `json`, no gems) on `PATH` (all standard on an Omarchy/Arch install with
   Kamal already set up).
 - Runs `bash scripts/discover.sh <folders...>` to scan the filesystem and
-  cache results at `$XDG_RUNTIME_DIR/eduard.kamal-deploy/targets.json`.
+  cache results at `$XDG_RUNTIME_DIR/eduard.kamal-deploy/targets.json` (or
+  `/tmp/eduard.kamal-deploy-$UID` if `$XDG_RUNTIME_DIR` isn't set — that
+  fallback directory's ownership and permissions are checked, refusing to
+  read or write through it if it's not exactly this user's own `0700`
+  directory, since `/tmp` is shared).
 - Every path field runs `bash scripts/complete-path.sh <partial>` (read-only
   directory listing) on Tab, restricted to `$HOME` the same way every write
   path in this plugin is.
@@ -254,6 +262,7 @@ the widget from your bar layout. It does **not** revert the
 | `manifest.json`                 | Plugin manifest (`bar-widget`)                                |
 | `Panel.qml`                     | Bar icon + task-list panel UI + Provision Wizard                |
 | `scripts/discover.sh`           | Scans search folders for `config/deploy*.yml`, prints/caches JSON |
+| `scripts/cache-dir.sh`          | Resolves + validates the targets-cache directory, sourced by the three scripts below |
 | `scripts/dispatch.sh`           | Shared action→`kamal`/`ruby` command mapping, sourced by both scripts below |
 | `scripts/run.sh`                | Resolves a clicked target, runs it in a real terminal (interactive/streaming actions) |
 | `scripts/run-background.sh`     | Same resolution, runs in the background instead, output captured for the panel |

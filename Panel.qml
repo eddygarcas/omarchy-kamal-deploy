@@ -670,6 +670,7 @@ Panel {
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall
                   elide: Text.ElideMiddle
+                  textFormat: Text.PlainText
                 }
 
                 PanelActionButton {
@@ -858,7 +859,16 @@ Panel {
               spacing: Style.space(8)
 
               readonly property string accessoryValue: bulkAccessoryField.text.trim()
-              readonly property bool accessoryValid: accessoryValue !== "" && !/\s/.test(accessoryValue)
+              // A real Kamal accessory name is a plain YAML key (letters,
+              // digits, - and _) — enforced as a strict allowlist, not just
+              // "no spaces", because this value ends up in a terminal
+              // window's --app-id for the Logs action, which
+              // omarchy-launch-or-focus-tui/-focus reassembles unquoted and
+              // runs through `eval`. A crafted accessory name (e.g. copied
+              // from a malicious deploy.yml's "Known:" hint) containing
+              // shell metacharacters would otherwise be able to run
+              // arbitrary commands the moment Logs is clicked.
+              readonly property bool accessoryValid: /^[A-Za-z0-9_-]+$/.test(accessoryValue)
 
               PanelSectionHeader { text: "ACCESSORIES"; foreground: root.foreground; fontFamily: root.fontFamily }
 
@@ -882,7 +892,7 @@ Panel {
               Text {
                 visible: bulkAccessoryField.text.trim() !== "" && !bulkAccessoryGroup.accessoryValid
                 width: parent.width
-                text: "Accessory name can't contain spaces."
+                text: "Accessory name must be letters, numbers, - or _ only."
                 color: root.urgent
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -1192,6 +1202,18 @@ Panel {
                   readonly property bool hostsValid: deployConfigGroup.webHosts.length > 0
                     && deployConfigGroup.webHosts.every(function(h) { return !/\s/.test(h) })
                     && deployConfigGroup.workersHosts.every(function(h) { return !/\s/.test(h) })
+                  // Becomes part of a filename (config/deploy.<env>.yml) —
+                  // a plain identifier only, blank meaning "the base
+                  // config". Not exploitable as written today (the fixed
+                  // "deploy." prefix forces a nonexistent-directory hop
+                  // before any ".." in here could take effect, confirmed
+                  // empirically), but that's an accidental property of the
+                  // current code, not something to rely on — a later
+                  // change adding `mkdir -p "$(dirname "$out_file")")`
+                  // for convenience would silently turn this back into a
+                  // real path-traversal write outside the project folder.
+                  readonly property bool envNameValid: root.wizardDeployEnv.trim() === ""
+                    || /^[A-Za-z0-9_-]+$/.test(root.wizardDeployEnv.trim())
 
                   PanelSectionHeader { text: "DEPLOY CONFIG"; foreground: root.foreground; fontFamily: root.fontFamily }
 
@@ -1214,6 +1236,14 @@ Panel {
                       placeholderText: "production, staging, …"
                       foreground: root.foreground
                       onTextChanged: root.wizardDeployEnv = text
+                    }
+                    Text {
+                      visible: !deployConfigGroup.envNameValid
+                      width: parent.width
+                      text: "Environment must be letters, numbers, - or _ only."
+                      color: root.urgent
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
                     }
                   }
 
@@ -1349,7 +1379,7 @@ Panel {
                       fontFamily: root.fontFamily
                       bordered: true
                       focusable: true
-                      enabled: deployConfigGroup.hostsValid && !root.wizardDeployGenerating
+                      enabled: deployConfigGroup.hostsValid && deployConfigGroup.envNameValid && !root.wizardDeployGenerating
                       onClicked: {
                         root.generateDeploy({
                           service: deployServiceField.text.trim() || root.wizardSuggestedService || "my-app",
@@ -1600,6 +1630,7 @@ Panel {
           text: String(block.project.name || "project").toUpperCase()
           foreground: root.foreground
           fontFamily: root.fontFamily
+          textFormat: Text.PlainText
         }
       }
 
@@ -1610,6 +1641,7 @@ Panel {
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         elide: Text.ElideMiddle
+        textFormat: Text.PlainText
       }
     }
 
@@ -1771,6 +1803,7 @@ Panel {
             font.pixelSize: Style.font.bodySmall
             font.bold: true
             elide: Text.ElideRight
+            textFormat: Text.PlainText
           }
 
           Text {

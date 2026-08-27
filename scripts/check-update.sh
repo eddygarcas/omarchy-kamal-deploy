@@ -26,7 +26,10 @@ repo_path="$(printf '%s' "$homepage" | sed -nE 's#^https?://github\.com/([^/]+/[
 [[ -n "$repo_path" ]] || no_update "$current_version"
 
 raw_url="https://raw.githubusercontent.com/${repo_path}/main/manifest.json"
-remote_manifest="$(curl -fsSL --max-time 8 "$raw_url" 2>/dev/null)" || no_update "$current_version"
+# --max-filesize caps a real manifest.json (well under 2 KiB) at 1 MiB —
+# generous headroom, but bounded against a MITM'd/compromised response
+# trying to hand back something huge.
+remote_manifest="$(curl -fsSL --max-time 8 --max-filesize 1048576 "$raw_url" 2>/dev/null)" || no_update "$current_version"
 [[ -n "$remote_manifest" ]] || no_update "$current_version"
 
 latest_version="$(printf '%s' "$remote_manifest" | jq -r '.version // empty' 2>/dev/null)"

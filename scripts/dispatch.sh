@@ -52,6 +52,15 @@ dispatch_action() {
       if [[ -z "$EXTRA" ]]; then
         die "No accessory name given."
       fi
+      # Defense in depth: Panel.qml already gates every accessory button on
+      # this same allowlist, but accessory_logs reaches this through a real
+      # terminal launcher (omarchy-launch-or-focus-tui) that reassembles
+      # its args unquoted and runs them through `eval` — validate again
+      # here so this script is never the only thing standing between a
+      # crafted accessory name and shell metacharacters reaching that eval.
+      if [[ ! "$EXTRA" =~ ^[A-Za-z0-9_-]+$ ]]; then
+        die "Invalid accessory name: $EXTRA"
+      fi
       sub="${ACTION#accessory_}"
       if [[ "$sub" == "reboot" ]]; then
         run_kamal lock release "${DEST[@]}"

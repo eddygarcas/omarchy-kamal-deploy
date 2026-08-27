@@ -5,9 +5,13 @@
 # clicked target back to a project path + destination flag.
 set -uo pipefail
 
-CACHE_DIR="${XDG_RUNTIME_DIR:-/tmp}/eduard.kamal-deploy"
-CACHE_FILE="$CACHE_DIR/targets.json"
-mkdir -p "$CACHE_DIR"
+source "$(dirname "${BASH_SOURCE[0]}")/cache-dir.sh"
+mkdir -p -m 700 "$CACHE_DIR" 2>/dev/null
+if ! cache_dir_is_safe; then
+  echo "Refusing to use unsafe cache directory: $CACHE_DIR" >&2
+  echo "[]"
+  exit 0
+fi
 
 write_empty() {
   echo "[]" | tee "$CACHE_FILE"

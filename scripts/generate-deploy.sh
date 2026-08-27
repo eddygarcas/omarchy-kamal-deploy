@@ -21,6 +21,17 @@ if [[ -z "$TARGET_DIR" || -z "$OPTIONS_JSON" ]]; then
   exit 1
 fi
 
+# Defense in depth: Panel.qml already validates this against the same
+# allowlist, but ENV_NAME becomes part of a filename below
+# (config/deploy.$ENV_NAME.yml) — reject anything else here too rather
+# than trust the caller, since a stray "/" reaching that write is a
+# path-traversal shape even though the current code isn't actually
+# exploitable that way (see Panel.qml's envNameValid comment for why).
+if [[ -n "$ENV_NAME" && ! "$ENV_NAME" =~ ^[A-Za-z0-9_-]+$ ]]; then
+  echo "Invalid environment name: $ENV_NAME" >&2
+  exit 1
+fi
+
 command -v ruby >/dev/null 2>&1 || { echo "ruby not found on PATH" >&2; exit 1; }
 [[ -f "$TEMPLATE" ]] || { echo "Missing template: $TEMPLATE" >&2; exit 1; }
 

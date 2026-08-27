@@ -9,7 +9,7 @@
 # only run through run.sh's real terminal.
 set -uo pipefail
 
-CACHE_FILE="${XDG_RUNTIME_DIR:-/tmp}/eduard.kamal-deploy/targets.json"
+source "$(dirname "${BASH_SOURCE[0]}")/cache-dir.sh"
 TARGET_ID="${1:-}"
 ACTION="${2:-}"
 EXTRA="${3:-}"
@@ -27,6 +27,7 @@ esac
 
 [[ -z "$TARGET_ID" || -z "$ACTION" ]] && die "Usage: run-background.sh <target_id> <action> [extra]"
 
+cache_dir_is_safe || die "Cache directory unavailable or unsafe: $CACHE_DIR — rescan the Kamal Deploy panel."
 [[ -f "$CACHE_FILE" ]] || die "No Kamal targets discovered yet — open the Kamal Deploy panel first."
 
 IFS=$'\x01' read -r PROJECT_DIR PROJECT_NAME ENV LABEL <<<"$(jq -r --arg id "$TARGET_ID" '
@@ -49,5 +50,25 @@ run_kamal() {
 }
 
 source "$(dirname "${BASH_SOURCE[0]}")/dispatch.sh"
-dispatch_action
-exit $?
+
+# dispatch_action's stdout/stderr feed a Quickshell StdioCollector with no
+# size limit of its own, inside the long-lived, shared omarchy-shell
+# process — a misbehaving/compromised remote server (kamal talks to
+# whatever host config/deploy.yml points at) echoing enough output could
+# otherwise grow that persistent process's memory unbounded. Redirect
+# through unpredictable (mktemp, mode 0600) temp files first — cheap,
+# unlimited real capacity for dispatch_action itself, no bash-side
+# buffering — then relay only a capped amount back to our own stdout/
+# stderr, which is what the panel actually reads.
+MAX_OUTPUT=65536
+out_file="$(mktemp)" || die "Could not create a temp file for output capture."
+err_file="$(mktemp)" || die "Could not create a temp file for output capture."
+trap 'rm -f "$out_file" "$err_file"' EXIT
+
+dispatch_action >"$out_file" 2>"$err_file"
+status=$?
+
+head -c "$MAX_OUTPUT" "$out_file"
+head -c "$MAX_OUTPUT" "$err_file" >&2
+
+exit "$status"
