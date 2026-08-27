@@ -70,9 +70,9 @@ fi
 mkdir -p "$config_dir" || { echo "Could not create folder: $config_dir" >&2; exit 1; }
 
 render_one() {
-  local target_file="$1" include_header_flag="$2"
-  ruby -r erb -r json -e '
-    json_text, template_path, tail_path, include_header_flag, out_file = ARGV
+  local target_file="$1" include_header_flag="$2" mode="$3"
+  ruby -r erb -r json -r tempfile -e '
+    json_text, template_path, tail_path, include_header_flag, out_file, mode = ARGV
     begin
       opts = JSON.parse(json_text)
     rescue JSON::ParserError => e
@@ -92,17 +92,52 @@ render_one() {
     if opts["include_header"] && File.exist?(tail_path)
       rendered = rendered.rstrip + "\n\n" + File.read(tail_path)
     end
-    File.write(out_file, rendered)
+    dir = File.dirname(out_file)
+    if mode == "exclusive"
+      # A base config/deploy.yml must never be silently overwritten — the
+      # caller already checked -f before getting here, but a plain
+      # File.write trusts that check forever, even though a symlink (or a
+      # real file created by something else) could appear at `out_file`
+      # in the gap between that check and this write. O_EXCL makes the
+      # open itself atomically fail if anything is already there,
+      # symlink or not, closing that gap instead of just narrowing it.
+      begin
+        File.open(out_file, File::WRONLY | File::CREAT | File::EXCL, 0644) { |f| f.write(rendered) }
+      rescue Errno::EEXIST
+        warn "#{out_file} already exists"
+        exit 1
+      end
+    else
+      # A named-environment override is expected to be overwritable
+      # (re-running the wizard for the same env always replaces it) —
+      # write to an unpredictably-named temp file in the same directory
+      # (Tempfile: mode 0600, O_EXCL) and rename(2) it into place, which
+      # atomically replaces whatever directory entry is at `out_file`,
+      # symlink included, without ever following it.
+      tmp = Tempfile.new(".deploy.tmp", dir)
+      begin
+        tmp.write(rendered)
+        tmp.close
+        File.rename(tmp.path, out_file)
+      ensure
+        tmp.unlink if File.exist?(tmp.path)
+      end
+    end
     puts out_file
-  ' "$OPTIONS_JSON" "$TEMPLATE" "$TAIL" "$include_header_flag" "$target_file"
+  ' "$OPTIONS_JSON" "$TEMPLATE" "$TAIL" "$include_header_flag" "$target_file" "$mode"
 }
 
 # A named environment with no base yet: generate the base first (full
 # skeleton, same service/image/servers the wizard collected), then the
 # requested override. Only ever touches deploy.yml when it doesn't exist —
-# same rule as the direct base-generation path above.
+# same rule as the direct base-generation path above — enforced by mode
+# "exclusive" rather than just the -f check above (see render_one).
 if [[ -n "$ENV_NAME" && ! -f "$base_file" ]]; then
-  render_one "$base_file" "true" || exit 1
+  render_one "$base_file" "true" "exclusive" || exit 1
 fi
 
-render_one "$out_file" "$out_include_header"
+if [[ -z "$ENV_NAME" ]]; then
+  render_one "$out_file" "$out_include_header" "exclusive"
+else
+  render_one "$out_file" "$out_include_header" "overwrite"
+fi

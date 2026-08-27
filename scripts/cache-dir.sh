@@ -17,6 +17,7 @@ else
   CACHE_DIR="/tmp/eduard.kamal-deploy-$UID"
 fi
 CACHE_FILE="$CACHE_DIR/targets.json"
+CACHE_FILE_MAX_BYTES=4194304   # 4 MiB — real content is a few KiB at most
 
 # True only if $CACHE_DIR exists, isn't a symlink, and is owned by us —
 # the one check that must never be "fixed", only refused: a different
@@ -50,4 +51,33 @@ ensure_cache_dir_safe() {
   mkdir -p "$CACHE_DIR" 2>/dev/null
   cache_dir_is_ours && chmod 700 "$CACHE_DIR" 2>/dev/null
   cache_dir_is_safe
+}
+
+# $CACHE_DIR being owner-only already means no other user could have
+# planted anything at $CACHE_FILE's path in the first place — but this is
+# cheap, so check explicitly anyway rather than lean entirely on that:
+# bash has no direct equivalent of opening with O_NOFOLLOW, so this
+# check-then-read is the closest approximation, done immediately before
+# every read rather than once up front.
+cache_file_is_safe() {
+  [[ -f "$CACHE_FILE" && ! -L "$CACHE_FILE" ]]
+}
+
+# Writes $1 to $CACHE_FILE without ever opening that path directly for
+# writing — the temp file is created fresh (mktemp, mode 0600, O_EXCL)
+# in the same already-validated directory, then `mv` (rename(2)) swaps
+# it into place atomically. rename() replaces whatever is at the
+# destination — including a symlink — as a directory-entry swap; it
+# never follows one. Requires cache_dir_is_safe to already hold.
+write_cache_file() {
+  local tmp
+  tmp="$(mktemp "$CACHE_DIR/.targets.json.XXXXXX")" || return 1
+  printf '%s' "$1" > "$tmp" || { rm -f "$tmp"; return 1; }
+  mv -f "$tmp" "$CACHE_FILE"
+}
+
+# Reads $CACHE_FILE bounded by CACHE_FILE_MAX_BYTES, having already
+# confirmed it's a real file (not a symlink) via cache_file_is_safe.
+read_cache_file() {
+  head -c "$CACHE_FILE_MAX_BYTES" -- "$CACHE_FILE"
 }

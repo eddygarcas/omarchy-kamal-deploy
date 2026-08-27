@@ -28,11 +28,11 @@ esac
 [[ -z "$TARGET_ID" || -z "$ACTION" ]] && die "Usage: run-background.sh <target_id> <action> [extra]"
 
 cache_dir_is_safe || die "Cache directory unavailable or unsafe: $CACHE_DIR — rescan the Kamal Deploy panel."
-[[ -f "$CACHE_FILE" ]] || die "No Kamal targets discovered yet — open the Kamal Deploy panel first."
+cache_file_is_safe || die "No Kamal targets discovered yet — open the Kamal Deploy panel first."
 
-IFS=$'\x01' read -r PROJECT_DIR PROJECT_NAME ENV LABEL <<<"$(jq -r --arg id "$TARGET_ID" '
+IFS=$'\x01' read -r PROJECT_DIR PROJECT_NAME ENV LABEL <<<"$(read_cache_file | jq -r --arg id "$TARGET_ID" '
   [.[] | . as $p | .environments[] | select(.targetId == $id) | [$p.path, $p.name, .env, .label]] | first // empty | join("")
-' "$CACHE_FILE" 2>/dev/null)"
+' 2>/dev/null)"
 
 [[ -z "${PROJECT_DIR:-}" ]] && die "Unknown deploy target — rescan the Kamal Deploy panel and try again."
 [[ -d "$PROJECT_DIR" ]] || die "Project folder no longer exists: $PROJECT_DIR"

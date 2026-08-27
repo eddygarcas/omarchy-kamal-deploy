@@ -34,12 +34,15 @@ appears next to **↻** (both bigger now, next to the panel title) only when
 this plugin's own GitHub repo has a newer `manifest.json` version than the
 one installed — checked once per panel-open, silently, never surfacing an
 error if you're offline or GitHub's unreachable, it just means no icon.
-Hover it to see the current/latest versions; click it to fast-forward this
-install to the latest commit — same spinner-then-result-card flow as any
-Kamal action below, refuses to touch anything if you have local changes
-here or history has diverged, and reminds you to `omarchy restart shell`
-once it's done (see **Customizing the commands** if you've been editing
-`scripts/dispatch.sh` yourself — that counts as a local change too).
+Hover it to see the current/latest versions; click it for update
+instructions — this plugin doesn't update itself. An earlier version did
+(`git fetch` + fast-forward from `origin/main`), but that pulls in
+whatever is on the branch right now regardless of whether the
+marketplace's own commit verification has reviewed it, silently trading
+the reviewed, listed snapshot for unreviewed code — outside what a
+plugin's own update mechanism can safely do on its own. Update by hand
+instead: `cd` into the plugin's folder, `git pull`, `omarchy restart
+shell`.
 
 - **Search folders** — folders to scan for `config/deploy*.yml`. Type a path
   (`~` is expanded, relative paths are taken as relative to your home
@@ -209,7 +212,11 @@ to one app to generalize; add it back the same way if you use it.)
   `/tmp/eduard.kamal-deploy-$UID` if `$XDG_RUNTIME_DIR` isn't set — that
   fallback directory's ownership and permissions are checked, refusing to
   read or write through it if it's not exactly this user's own `0700`
-  directory, since `/tmp` is shared).
+  directory, since `/tmp` is shared). The file itself is never opened
+  directly for writing (a fresh temp file is written instead and
+  `rename(2)`d into place — atomic, and replaces a symlink at that path
+  rather than following it) and every read is checked for a symlink first
+  and capped at 4 MiB.
 - Every path field runs `bash scripts/complete-path.sh <partial>` (read-only
   directory listing) on Tab, restricted to `$HOME` the same way every write
   path in this plugin is.
@@ -230,17 +237,19 @@ to one app to generalize; add it back the same way if you use it.)
   `bash scripts/generate-deploy.sh <folder> <env> <options>`, which
   **writes** `<folder>/config/deploy.yml` or
   `<folder>/config/deploy.<env>.yml` (refusing to touch an existing base
-  config — see **Deploy config** above).
+  config — see **Deploy config** above). Neither ever opens the destination
+  path directly: a base config is written with `O_EXCL` (atomically fails
+  if anything — file or symlink — is already there, rather than trusting an
+  earlier existence check); `provision` and a named-environment override,
+  which are meant to be regenerable, are written to a fresh temp file and
+  `rename(2)`d into place, which replaces a symlink instead of following it.
 - Reads/writes `"eduard.kamal-deploy".searchPaths` in
   `~/.config/omarchy/shell.json`.
 - Once per panel-open, runs `bash scripts/check-update.sh` (read-only) —
-  one `curl` request to `raw.githubusercontent.com` for this repo's own
-  `manifest.json`, silent on any failure including offline. Clicking the
-  update icon it can reveal runs `bash scripts/update-plugin.sh`, which
-  **writes** to this plugin's own install directory: `git fetch` +
-  `git merge --ff-only` only, and only if `git status` is clean — never a
-  `reset`/`rebase`/force-push, and it refuses outright if this install
-  isn't a git checkout to begin with.
+  one `curl` request (capped at 1 MiB) to `raw.githubusercontent.com` for
+  this repo's own `manifest.json`, silent on any failure including
+  offline. Clicking the update icon it can reveal only displays
+  instructions — nothing is fetched, run, or written on click.
 - Like every Quickshell plugin, `Panel.qml` runs unsandboxed inside the
   shared `omarchy-shell` process — review it before installing.
 
@@ -268,7 +277,6 @@ the widget from your bar layout. It does **not** revert the
 | `scripts/run-background.sh`     | Same resolution, runs in the background instead, output captured for the panel |
 | `scripts/complete-path.sh`      | Read-only Tab-completion for the panel's folder fields          |
 | `scripts/check-update.sh`       | Read-only: compares installed vs. GitHub `manifest.json` version |
-| `scripts/update-plugin.sh`      | `git fetch` + fast-forward-only merge of this install to latest `main` |
 | `scripts/detect-common.sh`      | Lists common project-folder names that exist under `$HOME`     |
 | `scripts/provision-check.sh`    | Read-only pre-flight checks for the Provision Wizard            |
 | `scripts/generate-provision.sh` | Renders `templates/provision.erb` into `<folder>/provision`    |

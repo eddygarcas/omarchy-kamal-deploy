@@ -41,7 +41,6 @@ Panel {
   readonly property string runScript: pluginDir + "/scripts/run.sh"
   readonly property string runBackgroundScript: pluginDir + "/scripts/run-background.sh"
   readonly property string checkUpdateScript: pluginDir + "/scripts/check-update.sh"
-  readonly property string updatePluginScript: pluginDir + "/scripts/update-plugin.sh"
 
   readonly property var savedSettings: bar && bar.shell && bar.shell.shellConfig
     && bar.shell.shellConfig["eduard.kamal-deploy"] && typeof bar.shell.shellConfig["eduard.kamal-deploy"] === "object"
@@ -334,14 +333,11 @@ Panel {
     return String(s || "").replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")
   }
 
-  // Shared by every background job — a Kamal action against a target, or
-  // the plugin's own self-update. `kind` distinguishes the latter so its
-  // completion can also refresh updateInfo (see checkForUpdate below).
-  function startBackgroundJob(labelText, args, kind) {
+  function startBackgroundJob(labelText, args) {
     var jobId = "job" + (root.backgroundJobSeq++)
     var job = { id: jobId, label: labelText, status: "running", output: "", exitCode: null }
     root.backgroundJobs = [job].concat(root.backgroundJobs)
-    var proc = backgroundJobComponent.createObject(root, { jobId: jobId, jobKind: kind || "", command: args })
+    var proc = backgroundJobComponent.createObject(root, { jobId: jobId, command: args })
     proc.running = true
   }
 
@@ -352,11 +348,30 @@ Panel {
       + (root.actionLabels[action] || action) + (extra ? (" (" + extra + ")") : "")
     var args = [root.runBackgroundScript, targetId, action]
     if (extra) args.push(extra)
-    root.startBackgroundJob(label, ["bash"].concat(args), "kamal")
+    root.startBackgroundJob(label, ["bash"].concat(args))
   }
 
-  function runUpdateJob() {
-    root.startBackgroundJob("Kamal Deploy — Update plugin", ["bash", root.updatePluginScript], "update")
+  // Deliberately NOT a self-update: an earlier version of this button ran
+  // `git fetch` + `git merge --ff-only` against mutable origin/main,
+  // which pulls in whatever is on the branch right now regardless of
+  // whether the marketplace's own exact-SHA verification has reviewed
+  // it — silently replacing the reviewed, listed snapshot with unreviewed
+  // code. This just tells the user a newer version exists and how to get
+  // it themselves, using the same result-card UI as any other action but
+  // with no process ever spawned.
+  function showUpdateInstructions() {
+    if (!root.updateInfo || !root.updateInfo.updateAvailable) return
+    var msg = "A newer version is available: v" + root.updateInfo.latestVersion
+      + " (installed: v" + root.updateInfo.currentVersion + ").\n\n"
+      + "This plugin doesn't update itself automatically, so you can review "
+      + "what changed first. To update:\n\n"
+      + "cd " + root.pluginDir + "\n"
+      + "git log HEAD..origin/main --oneline   # see what's new\n"
+      + "git pull\n"
+      + "omarchy restart shell\n"
+    var jobId = "job" + (root.backgroundJobSeq++)
+    var job = { id: jobId, label: "Kamal Deploy — update available", status: "done", output: msg, exitCode: 0 }
+    root.backgroundJobs = [job].concat(root.backgroundJobs)
   }
 
   function updateBackgroundJob(jobId, patch) {
@@ -382,7 +397,6 @@ Panel {
     Process {
       id: bgProc
       property string jobId: ""
-      property string jobKind: ""
       property string capturedOut: ""
       property string capturedErr: ""
       stdout: StdioCollector { waitForEnd: true; onStreamFinished: bgProc.capturedOut = text }
@@ -397,10 +411,6 @@ Panel {
           output: root.stripAnsi(combined).trim(),
           exitCode: exitCode
         })
-        if (bgProc.jobKind === "update" && exitCode === 0) {
-          root.updateInfo = null
-          root.checkForUpdate()
-        }
         bgProc.destroy()
       }
     }
@@ -614,12 +624,12 @@ Panel {
                   iconText: ""
                   fontSize: Style.font.iconLarge
                   tooltipText: root.updateInfo && root.updateInfo.updateAvailable
-                    ? ("Update available: v" + root.updateInfo.latestVersion + " (installed v" + root.updateInfo.currentVersion + ")")
+                    ? ("Update available: v" + root.updateInfo.latestVersion + " (installed v" + root.updateInfo.currentVersion + ") — click for update instructions")
                     : ""
                   foreground: root.foreground
                   hoverColor: Color.accent
                   focusable: true
-                  onClicked: root.runUpdateJob()
+                  onClicked: root.showUpdateInstructions()
                 }
 
                 PanelActionButton {

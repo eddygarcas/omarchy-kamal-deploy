@@ -13,7 +13,8 @@ if ! ensure_cache_dir_safe; then
 fi
 
 write_empty() {
-  echo "[]" | tee "$CACHE_FILE"
+  write_cache_file "[]"
+  echo "[]"
   exit 0
 }
 
@@ -199,4 +200,5 @@ if [[ -z "$result" || "$result" == "null" ]]; then
   write_empty
 fi
 
-echo "$result" | tee "$CACHE_FILE"
+write_cache_file "$result"
+echo "$result"

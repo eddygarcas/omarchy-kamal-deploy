@@ -30,7 +30,7 @@ expanded="$resolved"
 
 mkdir -p "$expanded" || { echo "Could not create folder: $expanded" >&2; exit 1; }
 
-ruby -r erb -r json -e '
+ruby -r erb -r json -r tempfile -e '
   target, json_text, template_path = ARGV
   begin
     opts = JSON.parse(json_text)
@@ -49,7 +49,23 @@ ruby -r erb -r json -e '
     exit 1
   end
   out = File.join(target, "provision")
-  File.write(out, rendered)
+  # Regenerating an existing provision script is expected (re-running the
+  # wizard always overwrites) — but a plain File.write checks nothing
+  # about what is currently at `out`, so a symlink placed there between
+  # any earlier check and this write would be followed and clobber
+  # whatever it points at instead. Write to a fresh, unpredictably-named
+  # temp file in the same directory (Tempfile: mode 0600, created with
+  # O_EXCL) and rename(2) it into place — rename replaces the directory
+  # entry at `out` atomically, including a symlink, without ever
+  # following it.
+  tmp = Tempfile.new(".provision.tmp", target)
+  begin
+    tmp.write(rendered)
+    tmp.close
+    File.rename(tmp.path, out)
+  ensure
+    tmp.unlink if File.exist?(tmp.path)
+  end
   puts out
 ' "$expanded" "$OPTIONS_JSON" "$TEMPLATE"
 
