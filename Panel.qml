@@ -124,6 +124,7 @@ Panel {
   property string wizardKnownPath: ""
   property string wizardCustomPath: ""
   readonly property string wizardResolvedPath: (wizardTargetMode === "known" ? wizardKnownPath : wizardCustomPath).trim()
+  readonly property bool wizardTargetValid: root.wizardResolvedPath !== "" && root.isUnderHome(root.wizardResolvedPath)
   property var wizardChecks: null
   property bool wizardChecking: false
   property bool wizardGenerating: false
@@ -153,7 +154,7 @@ Panel {
   }
 
   function runWizardChecks() {
-    if (root.wizardResolvedPath === "") { root.wizardChecks = null; return }
+    if (!root.wizardTargetValid) { root.wizardChecks = null; return }
     if (checkProcess.running) return
     root.wizardChecking = true
     checkProcess.command = ["bash", root.provisionCheckScript, root.wizardResolvedPath]
@@ -169,7 +170,7 @@ Panel {
   }
 
   function generateProvision(options) {
-    if (root.wizardResolvedPath === "" || generateProcess.running) return
+    if (!root.wizardTargetValid || generateProcess.running) return
     root.wizardGenerating = true
     root.wizardResult = ""
     generateProcess.command = ["bash", root.generateProvisionScript, root.wizardResolvedPath, JSON.stringify(options)]
@@ -184,9 +185,43 @@ Panel {
     })
   }
 
+  // Safety baseline: every folder this plugin touches — search folders here,
+  // the Provision Wizard's custom path in wizardTargetValid below — must
+  // resolve inside $HOME. Lexically resolves "." / ".." segments (so
+  // "~/../../etc" can't pass as home-scoped just because it starts with the
+  // right prefix) the same way `realpath -m` does in the bash scripts,
+  // which re-check this independently since it's the real safety boundary —
+  // this is just for fast, friendly feedback before ever shelling out.
+  function resolvePath(p) {
+    var value = String(p || "").trim()
+    if (value === "") return ""
+    if (value === "~") value = root.home
+    else if (value.indexOf("~/") === 0) value = root.home + value.slice(1)
+    if (value.charAt(0) !== "/") value = root.home + "/" + value
+    var parts = value.split("/")
+    var out = []
+    for (var i = 0; i < parts.length; i++) {
+      var seg = parts[i]
+      if (seg === "" || seg === ".") continue
+      if (seg === "..") { if (out.length > 0) out.pop(); continue }
+      out.push(seg)
+    }
+    return "/" + out.join("/")
+  }
+
+  function isUnderHome(p) {
+    var resolved = root.resolvePath(p)
+    return resolved !== "" && (resolved === root.home || resolved.indexOf(root.home + "/") === 0)
+  }
+
   function addSearchPath(p) {
     var trimmed = String(p || "").trim()
     if (trimmed === "" || root.searchPaths.indexOf(trimmed) !== -1) return
+    if (!root.isUnderHome(trimmed)) {
+      root.lastScanError = "Search folders must be inside your home folder (" + root.home + ")."
+      return
+    }
+    root.lastScanError = ""
     root.saveSearchPaths(root.searchPaths.concat([trimmed]))
     Qt.callLater(root.rescan)
   }
@@ -809,10 +844,20 @@ Panel {
                     visible: root.wizardResolvedPath !== ""
                     width: parent.width
                     text: root.wizardResolvedPath
-                    color: root.dim
+                    color: root.wizardTargetValid ? root.dim : root.urgent
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
                     elide: Text.ElideMiddle
+                  }
+
+                  Text {
+                    visible: root.wizardResolvedPath !== "" && !root.wizardTargetValid
+                    width: parent.width
+                    text: "Must be inside your home folder (" + root.home + ")."
+                    color: root.urgent
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    wrapMode: Text.WordWrap
                   }
                 }
 
@@ -820,7 +865,7 @@ Panel {
                 Column {
                   width: parent.width
                   spacing: Style.space(6)
-                  visible: root.wizardResolvedPath !== ""
+                  visible: root.wizardTargetValid
 
                   PanelSectionHeader { text: "CHECKS"; foreground: root.foreground; fontFamily: root.fontFamily }
 
@@ -994,7 +1039,7 @@ Panel {
                     fontFamily: root.fontFamily
                     bordered: true
                     focusable: true
-                    enabled: root.wizardResolvedPath !== "" && !root.wizardGenerating
+                    enabled: root.wizardTargetValid && !root.wizardGenerating
                     onClicked: {
                       var ports = extraPortsField.text.split(",")
                         .map(function(s) { return s.trim() })

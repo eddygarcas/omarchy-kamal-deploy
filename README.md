@@ -32,10 +32,14 @@ omarchy plugin enable eduard.kamal-deploy
 Click the bar icon (a compass) to open the panel:
 
 - **Search folders** — folders to scan for `config/deploy*.yml`. Type a path
-  (`~` is expanded) and hit **Add**, or click **Detect** to pick up common
-  project folders (`~/Code`, `~/Projects`, `~/dev`, `~/RubymineProjects`,
-  …) automatically. Saved in `shell.json` under `"eduard.kamal-deploy"`, so
-  it survives restarts. Click **↻** to rescan on demand.
+  (`~` is expanded, relative paths are taken as relative to your home
+  folder) and hit **Add**, or click **Detect** to pick up common project
+  folders (`~/Code`, `~/Projects`, `~/dev`, `~/RubymineProjects`, …)
+  automatically. Saved in `shell.json` under `"eduard.kamal-deploy"`, so it
+  survives restarts. Click **↻** to rescan on demand. As a safety baseline,
+  every folder must resolve inside your home folder — `/etc`, `/`, or a
+  `..`-traversal trick like `~/../../etc` are all rejected, both here and
+  again by `discover.sh` itself (in case `shell.json` was hand-edited).
 - **Checklist** — one section per project (named from `service:` in its base
   `deploy.yml`, or the folder name, with a small language badge — **RB**
   for Ruby (`Gemfile`), **GO** for Go (`go.mod`), **TS** for TypeScript
@@ -82,7 +86,10 @@ Click **+** next to the rescan button (↻) to open the wizard for setting up
 a brand-new server. It:
 
 1. **Target folder** — pick one of your discovered projects, or type a
-   custom path (for a project not scanned yet).
+   custom path (for a project not scanned yet). Same home-folder safety
+   baseline as search folders — a path outside `~` is flagged in red and
+   blocks both the checks and Generate, and `generate-provision.sh` refuses
+   to write outside `$HOME` even if it's called some other way.
 2. **Checks** — runs `scripts/provision-check.sh` against that folder and
    shows: does `config/deploy.yml` (or `deploy.<env>.yml`) exist, does the
    `Gemfile` have the `kamal` and `net-ssh` gems, does `ssh-add -l` show a

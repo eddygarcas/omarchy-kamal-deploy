@@ -14,11 +14,24 @@ write_empty() {
   exit 0
 }
 
+# Safety baseline: every search folder must resolve inside $HOME. The panel
+# already enforces this when a folder is added, but this scan runs off
+# whatever is saved in shell.json, which could predate the check or have
+# been hand-edited — so it's re-checked here too, resolving `..` segments
+# via realpath rather than trusting a string prefix.
+within_home() {
+  local resolved
+  resolved="$(realpath -m -- "$1" 2>/dev/null)" || return 1
+  [[ "$resolved" == "$HOME" || "$resolved" == "$HOME"/* ]]
+}
+
 paths=()
 for raw in "$@"; do
   [[ -z "$raw" ]] && continue
   expanded="${raw/#\~/$HOME}"
-  [[ -d "$expanded" ]] && paths+=("$expanded")
+  [[ -d "$expanded" ]] || continue
+  within_home "$expanded" || continue
+  paths+=("$expanded")
 done
 
 [[ ${#paths[@]} -eq 0 ]] && write_empty

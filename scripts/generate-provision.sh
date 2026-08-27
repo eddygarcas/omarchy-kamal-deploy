@@ -17,6 +17,17 @@ command -v ruby >/dev/null 2>&1 || { echo "ruby not found on PATH" >&2; exit 1; 
 [[ -f "$TEMPLATE" ]] || { echo "Missing template: $TEMPLATE" >&2; exit 1; }
 
 expanded="${TARGET_DIR/#\~/$HOME}"
+
+# Safety baseline: this writes a file, so the target must resolve inside
+# $HOME — resolved via realpath (follows `..` segments) rather than a
+# string prefix, so e.g. "~/../../etc" can't sneak past a naive check.
+resolved="$(realpath -m -- "$expanded" 2>/dev/null)"
+if [[ -z "$resolved" || ( "$resolved" != "$HOME" && "$resolved" != "$HOME"/* ) ]]; then
+  echo "Refusing to write outside your home folder ($HOME): $expanded" >&2
+  exit 1
+fi
+expanded="$resolved"
+
 mkdir -p "$expanded" || { echo "Could not create folder: $expanded" >&2; exit 1; }
 
 ruby -r erb -r json -e '

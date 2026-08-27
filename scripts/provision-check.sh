@@ -14,6 +14,16 @@ fi
 
 expanded="${DIR/#\~/$HOME}"
 
+# Safety baseline: the wizard only ever writes inside $HOME (see
+# generate-provision.sh) — report that up front, resolved via realpath so
+# `..` segments can't present a folder as in-home when it isn't.
+resolved="$(realpath -m -- "$expanded" 2>/dev/null)"
+if [[ -z "$resolved" || ( "$resolved" != "$HOME" && "$resolved" != "$HOME"/* ) ]]; then
+  jq -n --arg dir "$expanded" '{dir:$dir, folderExists:false, outsideHome:true}'
+  exit 0
+fi
+expanded="$resolved"
+
 if [[ ! -d "$expanded" ]]; then
   jq -n --arg dir "$expanded" '{dir:$dir, folderExists:false}'
   exit 0
@@ -62,6 +72,7 @@ jq -n \
   '{
     dir: $dir,
     folderExists: true,
+    outsideHome: false,
     configFound: $configFound,
     configFile: $configFile,
     gemfileFound: $gemfileFound,
