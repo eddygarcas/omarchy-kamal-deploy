@@ -146,6 +146,14 @@ Panel {
   readonly property bool wizardDeployFileExists: root.wizardDeployTargetIsBase
     ? !!(root.wizardChecks && root.wizardChecks.baseDeployExists)
     : !!(root.wizardChecks && root.wizardChecks.envDeployExists)
+  // A named environment with no base config yet gets one generated
+  // alongside it (see generate-deploy.sh) — an override with nothing to
+  // override isn't useful on its own. service/image only matter for that
+  // base render, so they stay visible whenever one is about to happen,
+  // whether this generation targets the base directly or triggers it as
+  // a side effect of a named-environment override.
+  readonly property bool wizardBaseWillBeCreated: !root.wizardDeployTargetIsBase
+    && !(root.wizardChecks && root.wizardChecks.baseDeployExists)
   readonly property string wizardSuggestedService: {
     if (root.wizardResolvedPath === "") return ""
     var parts = root.wizardResolvedPath.split("/").filter(function(s) { return s !== "" })
@@ -385,7 +393,8 @@ Panel {
       root.wizardDeployGenerating = false
       if (exitCode === 0) {
         root.wizardDeployResultIsError = false
-        root.wizardDeployResult = "Created " + generateDeployProcess.capturedOut.trim()
+        var createdFiles = generateDeployProcess.capturedOut.trim().split("\n").filter(function(s) { return s !== "" })
+        root.wizardDeployResult = "Created " + createdFiles.join(" and ")
         root.rescan()
         root.runWizardChecks()
       } else {
@@ -984,7 +993,7 @@ Panel {
 
                   Text {
                     width: parent.width
-                    text: "Generates config/deploy.yml (a brand-new project) or config/deploy.<env>.yml (an override for an existing one) — servers plus, for a new base config, the same proxy/registry/builder guidance `kamal init` ships."
+                    text: "Generates config/deploy.yml (a brand-new project) or config/deploy.<env>.yml (an override for an existing one) — servers plus, for a new base config, the full proxy/registry/env/builder skeleton. A named environment with no base yet gets both, in one click."
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.bodySmall
@@ -1006,7 +1015,8 @@ Panel {
 
                   Text {
                     width: parent.width
-                    text: "→ config/deploy" + (root.wizardDeployTargetIsBase ? "" : ("." + root.wizardDeployEnv.trim())) + ".yml"
+                    text: (root.wizardBaseWillBeCreated ? "→ config/deploy.yml + " : "→ ")
+                      + "config/deploy" + (root.wizardDeployTargetIsBase ? "" : ("." + root.wizardDeployEnv.trim())) + ".yml"
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
@@ -1017,6 +1027,16 @@ Panel {
                     width: parent.width
                     text: "config/deploy.yml already exists — edit it directly, or type an environment name above (e.g. staging) to add an override instead."
                     color: root.urgent
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    wrapMode: Text.WordWrap
+                  }
+
+                  Text {
+                    visible: root.wizardBaseWillBeCreated
+                    width: parent.width
+                    text: "config/deploy.yml doesn't exist yet — it'll be generated too, using Service/Image below plus these servers."
+                    color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.bodySmall
                     wrapMode: Text.WordWrap
@@ -1040,7 +1060,7 @@ Panel {
                     Row {
                       width: parent.width
                       spacing: Style.space(8)
-                      visible: root.wizardDeployTargetIsBase
+                      visible: root.wizardDeployTargetIsBase || root.wizardBaseWillBeCreated
 
                       Column {
                         width: (parent.width - parent.spacing) / 2
@@ -1119,7 +1139,7 @@ Panel {
                     }
 
                     Button {
-                      text: root.wizardDeployGenerating ? "Generating…" : "Generate deploy.yml"
+                      text: root.wizardDeployGenerating ? "Generating…" : (root.wizardBaseWillBeCreated ? "Generate deploy.yml + config" : "Generate deploy.yml")
                       fontSize: Style.font.bodySmall
                       foreground: root.foreground
                       fontFamily: root.fontFamily

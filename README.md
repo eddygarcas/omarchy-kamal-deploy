@@ -138,9 +138,14 @@ default command, a second role like `workers` is optional too, and click
   Kamal's own configuration docs (`DB_USER`/`DB_PASSWORD` for `env`,
   `<your registry server>` for `registry`) — never made-up, and never
   copied from any one real project's actual values.
-- **Named environment** — always a minimal, `servers:`-only override, the
-  normal Kamal pattern for adding a destination to an app that already has
-  a base config. Safe to regenerate; only touches that one file.
+- **Named environment** — a minimal, `servers:`-only override, the normal
+  Kamal pattern for adding a destination to an app that already has a base
+  config. If `config/deploy.yml` doesn't exist yet either, it's generated
+  too (full skeleton, same Service/Image/servers from the form) — an
+  override with nothing to override isn't useful on its own, and this
+  saves a second trip through the wizard for a brand-new project. Once a
+  base exists, later named-environment generations only ever touch that
+  one override file.
 
 The wizard will never let you regenerate an existing base config with a
 minimal one — that would silently delete every other setting in it. Want
