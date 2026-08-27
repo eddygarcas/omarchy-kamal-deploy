@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "eduard.kamal-deploy",
+  "name": "Kamal Deploy",
+  "version": "1.0.0",
+  "author": "Eduard G. Castelló",
+  "license": "MIT",
+  "homepage": "",
+  "description": "Discover Kamal deploy.<env>.yml targets under your project folders and run setup, deploy, logs, console, accessory, and lock actions from the bar — each one opens your default terminal so you never have to open one yourself.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Kamal Deploy",
+    "description": "Kamal deployment targets and actions",
+    "category": "Development",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
