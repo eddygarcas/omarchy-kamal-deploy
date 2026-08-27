@@ -29,7 +29,17 @@ omarchy plugin enable eduard.kamal-deploy
 
 ## What it does
 
-Click the bar icon (a compass) to open the panel:
+Click the bar icon (a compass) to open the panel. A **⬇ update icon**
+appears next to **↻** (both bigger now, next to the panel title) only when
+this plugin's own GitHub repo has a newer `manifest.json` version than the
+one installed — checked once per panel-open, silently, never surfacing an
+error if you're offline or GitHub's unreachable, it just means no icon.
+Hover it to see the current/latest versions; click it to fast-forward this
+install to the latest commit — same spinner-then-result-card flow as any
+Kamal action below, refuses to touch anything if you have local changes
+here or history has diverged, and reminds you to `omarchy restart shell`
+once it's done (see **Customizing the commands** if you've been editing
+`scripts/dispatch.sh` yourself — that counts as a local change too).
 
 - **Search folders** — folders to scan for `config/deploy*.yml`. Type a path
   (`~` is expanded, relative paths are taken as relative to your home
@@ -215,6 +225,14 @@ to one app to generalize; add it back the same way if you use it.)
   config — see **Deploy config** above).
 - Reads/writes `"eduard.kamal-deploy".searchPaths` in
   `~/.config/omarchy/shell.json`.
+- Once per panel-open, runs `bash scripts/check-update.sh` (read-only) —
+  one `curl` request to `raw.githubusercontent.com` for this repo's own
+  `manifest.json`, silent on any failure including offline. Clicking the
+  update icon it can reveal runs `bash scripts/update-plugin.sh`, which
+  **writes** to this plugin's own install directory: `git fetch` +
+  `git merge --ff-only` only, and only if `git status` is clean — never a
+  `reset`/`rebase`/force-push, and it refuses outright if this install
+  isn't a git checkout to begin with.
 - Like every Quickshell plugin, `Panel.qml` runs unsandboxed inside the
   shared `omarchy-shell` process — review it before installing.
 
@@ -240,6 +258,8 @@ the widget from your bar layout. It does **not** revert the
 | `scripts/run.sh`                | Resolves a clicked target, runs it in a real terminal (interactive/streaming actions) |
 | `scripts/run-background.sh`     | Same resolution, runs in the background instead, output captured for the panel |
 | `scripts/complete-path.sh`      | Read-only Tab-completion for the panel's folder fields          |
+| `scripts/check-update.sh`       | Read-only: compares installed vs. GitHub `manifest.json` version |
+| `scripts/update-plugin.sh`      | `git fetch` + fast-forward-only merge of this install to latest `main` |
 | `scripts/detect-common.sh`      | Lists common project-folder names that exist under `$HOME`     |
 | `scripts/provision-check.sh`    | Read-only pre-flight checks for the Provision Wizard            |
 | `scripts/generate-provision.sh` | Renders `templates/provision.erb` into `<folder>/provision`    |

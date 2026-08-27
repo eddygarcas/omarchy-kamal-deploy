@@ -40,6 +40,8 @@ Panel {
   readonly property string discoverScript: pluginDir + "/scripts/discover.sh"
   readonly property string runScript: pluginDir + "/scripts/run.sh"
   readonly property string runBackgroundScript: pluginDir + "/scripts/run-background.sh"
+  readonly property string checkUpdateScript: pluginDir + "/scripts/check-update.sh"
+  readonly property string updatePluginScript: pluginDir + "/scripts/update-plugin.sh"
 
   readonly property var savedSettings: bar && bar.shell && bar.shell.shellConfig
     && bar.shell.shellConfig["eduard.kamal-deploy"] && typeof bar.shell.shellConfig["eduard.kamal-deploy"] === "object"
@@ -332,24 +334,29 @@ Panel {
     return String(s || "").replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")
   }
 
+  // Shared by every background job — a Kamal action against a target, or
+  // the plugin's own self-update. `kind` distinguishes the latter so its
+  // completion can also refresh updateInfo (see checkForUpdate below).
+  function startBackgroundJob(labelText, args, kind) {
+    var jobId = "job" + (root.backgroundJobSeq++)
+    var job = { id: jobId, label: labelText, status: "running", output: "", exitCode: null }
+    root.backgroundJobs = [job].concat(root.backgroundJobs)
+    var proc = backgroundJobComponent.createObject(root, { jobId: jobId, jobKind: kind || "", command: args })
+    proc.running = true
+  }
+
   function runBackgroundJob(targetId, action, extra) {
     var entry = root.targetIndex[targetId]
     if (!entry) return
-    var jobId = "job" + (root.backgroundJobSeq++)
-    var job = {
-      id: jobId,
-      projectName: entry.project.name || "project",
-      envLabel: entry.env.label || "default",
-      actionLabel: (root.actionLabels[action] || action) + (extra ? (" (" + extra + ")") : ""),
-      status: "running",
-      output: "",
-      exitCode: null
-    }
-    root.backgroundJobs = [job].concat(root.backgroundJobs)
+    var label = (entry.project.name || "project") + " / " + (entry.env.label || "default") + " — "
+      + (root.actionLabels[action] || action) + (extra ? (" (" + extra + ")") : "")
     var args = [root.runBackgroundScript, targetId, action]
     if (extra) args.push(extra)
-    var proc = backgroundJobComponent.createObject(root, { jobId: jobId, command: ["bash"].concat(args) })
-    proc.running = true
+    root.startBackgroundJob(label, ["bash"].concat(args), "kamal")
+  }
+
+  function runUpdateJob() {
+    root.startBackgroundJob("Kamal Deploy — Update plugin", ["bash", root.updatePluginScript], "update")
   }
 
   function updateBackgroundJob(jobId, patch) {
@@ -375,6 +382,7 @@ Panel {
     Process {
       id: bgProc
       property string jobId: ""
+      property string jobKind: ""
       property string capturedOut: ""
       property string capturedErr: ""
       stdout: StdioCollector { waitForEnd: true; onStreamFinished: bgProc.capturedOut = text }
@@ -389,7 +397,40 @@ Panel {
           output: root.stripAnsi(combined).trim(),
           exitCode: exitCode
         })
+        if (bgProc.jobKind === "update" && exitCode === 0) {
+          root.updateInfo = null
+          root.checkForUpdate()
+        }
         bgProc.destroy()
+      }
+    }
+  }
+
+  // ------------------------------------------------------- update checking
+  // Checked once per panel-open (see onOpenedChanged below), against this
+  // plugin's own GitHub repo — see scripts/check-update.sh for exactly
+  // how (always silent on failure, offline included; never surfaces as an
+  // error here, the button just doesn't appear).
+  property var updateInfo: null
+  property bool updateCheckDone: false
+
+  function checkForUpdate() {
+    if (updateCheckProcess.running) return
+    updateCheckProcess.command = ["bash", root.checkUpdateScript]
+    updateCheckProcess.running = true
+  }
+
+  Process {
+    id: updateCheckProcess
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.updateCheckDone = true
+        try {
+          root.updateInfo = JSON.parse(text)
+        } catch (e) {
+          root.updateInfo = null
+        }
       }
     }
   }
@@ -412,6 +453,7 @@ Panel {
 
   onOpenedChanged: if (opened) {
     if (root.searchPaths.length > 0 && root.projects.length === 0) root.rescan()
+    if (!root.updateCheckDone) root.checkForUpdate()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
@@ -564,12 +606,30 @@ Panel {
             }
 
             trailingControl: Component {
-              PanelActionButton {
-                iconText: "↻"
-                tooltipText: "Rescan"
-                foreground: root.foreground
-                focusable: true
-                onClicked: root.rescan()
+              Row {
+                spacing: Style.space(6)
+
+                PanelActionButton {
+                  visible: !!(root.updateInfo && root.updateInfo.updateAvailable)
+                  iconText: ""
+                  fontSize: Style.font.iconLarge
+                  tooltipText: root.updateInfo && root.updateInfo.updateAvailable
+                    ? ("Update available: v" + root.updateInfo.latestVersion + " (installed v" + root.updateInfo.currentVersion + ")")
+                    : ""
+                  foreground: root.foreground
+                  hoverColor: Color.accent
+                  focusable: true
+                  onClicked: root.runUpdateJob()
+                }
+
+                PanelActionButton {
+                  iconText: "↻"
+                  fontSize: Style.font.iconLarge
+                  tooltipText: "Rescan"
+                  foreground: root.foreground
+                  focusable: true
+                  onClicked: root.rescan()
+                }
               }
             }
           }
@@ -1705,7 +1765,7 @@ Panel {
 
           Text {
             width: parent.width
-            text: card.job.projectName + " / " + card.job.envLabel + " — " + card.job.actionLabel
+            text: card.job.label
             color: root.foreground
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
