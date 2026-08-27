@@ -1444,7 +1444,7 @@ Panel {
       id: checkbox
       width: Style.space(18)
       height: Style.space(18)
-      radius: Math.max(2, Style.cornerRadius / 2)
+      radius: width / 2
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
       color: row.selected ? Style.selectedFillFor(root.foreground, Color.accent) : "transparent"
