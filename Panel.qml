@@ -11,9 +11,11 @@ import qs.Ui
 // checking one or more rows (across one or many projects) reveals a shared
 // action bar at the bottom — the actions from the user's own kamal_menu()
 // shell function (provision / setup / deploy / accessories / logs / console
-// / rack_attack / shell), plus a few more pulled from the Kamal CLI
-// (rollback, details, lock, audit, restart) — and clicking one runs it
-// against every checked target at once.
+// / shell), plus a few more pulled from the Kamal CLI (rollback, details,
+// lock, audit, restart) — and clicking one runs it against every checked
+// target at once. Each action carries a `icon` glyph (Font Awesome
+// codepoints from the Nerd Font's legacy PUA block, verified against the
+// font's own cmap before use, not guessed blind).
 //
 // Every action runs via `omarchy-launch-or-focus-tui`, which opens (or
 // refocuses) the system's default terminal running scripts/run.sh — real
@@ -565,11 +567,11 @@ Panel {
               width: parent.width
               heading: "DEPLOY"
               actions: [
-                { label: "Provision", action: "provision", enabled: root.selectedHasProvision,
+                { label: "Provision", action: "provision", icon: "", enabled: root.selectedHasProvision,
                   disabledReason: "Not every selected target has a provision script — run the Provision Wizard for the ones that don't." },
-                { label: "Setup", action: "setup" },
-                { label: "Deploy", action: "deploy" },
-                { label: "Rollback", action: "rollback" }
+                { label: "Setup", action: "setup", icon: "" },
+                { label: "Deploy", action: "deploy", icon: "" },
+                { label: "Rollback", action: "rollback", icon: "" }
               ]
             }
 
@@ -577,12 +579,11 @@ Panel {
               width: parent.width
               heading: "APPLICATION"
               actions: [
-                { label: "Tail logs", action: "logs" },
-                { label: "Rails console", action: "console" },
-                { label: "Bash shell", action: "shell" },
-                { label: "Rack attack status", action: "rack_attack" },
-                { label: "Restart", action: "restart" },
-                { label: "Details", action: "details" }
+                { label: "Tail logs", action: "logs", icon: "" },
+                { label: "Rails console", action: "console", icon: "" },
+                { label: "Bash shell", action: "shell", icon: "" },
+                { label: "Restart", action: "restart", icon: "" },
+                { label: "Details", action: "details", icon: "" }
               ]
             }
 
@@ -590,9 +591,9 @@ Panel {
               width: parent.width
               heading: "OPERATIONS"
               actions: [
-                { label: "Lock status", action: "lock_status" },
-                { label: "Release lock", action: "lock_release" },
-                { label: "Audit log", action: "audit" }
+                { label: "Lock status", action: "lock_status", icon: "" },
+                { label: "Release lock", action: "lock_release", icon: "" },
+                { label: "Audit log", action: "audit", icon: "" }
               ]
             }
 
@@ -638,17 +639,18 @@ Panel {
 
                 Repeater {
                   model: [
-                    { label: "Boot", action: "accessory_boot" },
-                    { label: "Reboot", action: "accessory_reboot" },
-                    { label: "Stop", action: "accessory_stop" },
-                    { label: "Restart", action: "accessory_restart" },
-                    { label: "Logs", action: "accessory_logs" },
-                    { label: "Remove", action: "accessory_remove" }
+                    { label: "Boot", action: "accessory_boot", icon: "" },
+                    { label: "Reboot", action: "accessory_reboot", icon: "" },
+                    { label: "Stop", action: "accessory_stop", icon: "" },
+                    { label: "Restart", action: "accessory_restart", icon: "" },
+                    { label: "Logs", action: "accessory_logs", icon: "" },
+                    { label: "Remove", action: "accessory_remove", icon: "" }
                   ]
 
                   Button {
                     required property var modelData
                     text: modelData.label
+                    iconText: modelData.icon
                     fontSize: Style.font.bodySmall
                     foreground: modelData.action === "accessory_remove" ? root.urgent : root.foreground
                     fontFamily: root.fontFamily
@@ -1186,6 +1188,7 @@ Panel {
         Button {
           required property var modelData
           text: modelData.label
+          iconText: modelData.icon || ""
           tooltipText: (modelData.enabled === false && modelData.disabledReason) ? modelData.disabledReason : ""
           fontSize: Style.font.bodySmall
           foreground: root.foreground

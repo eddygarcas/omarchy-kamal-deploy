@@ -46,16 +46,15 @@ Click the bar icon (a compass) to open the panel:
   `config/deploy.<env>.yml`).
   **Select all** / **Clear** toggle everything at once. As soon as anything
   is checked, a **SELECTED (N)** chip row appears (click a chip's ✕ to
-  uncheck just that one) followed by the shared action bar:
+  uncheck just that one) followed by the shared action bar — every button
+  carries an icon for its action:
   - **Deploy** — Provision (`ruby provision <env>` — enabled only once
     *every* selected target's project has a `provision` script, see
     **Provision Wizard** below), Setup (`kamal setup -v`), Deploy (`kamal
     lock release` then `kamal deploy -v`), Rollback (`kamal rollback`).
   - **Application** — Tail logs (`kamal app logs -f`), Rails console (`kamal
     app exec -i 'bin/rails console'`), Bash shell (`kamal app exec -i
-    bash`), Rack attack status (`kamal app exec --reuse 'bin/rails
-    rack_attack:status'`), Restart (`kamal app restart`), Details (`kamal
-    details`).
+    bash`), Restart (`kamal app restart`), Details (`kamal details`).
   - **Operations** — Lock status, Release lock, Audit log.
   - **Accessories** — known accessory names (parsed from every selected
     project's `accessories:` block) are listed as a hint; type one into the
@@ -107,11 +106,12 @@ different choices; it always overwrites, never merges.
 
 ## Customizing the commands
 
-`ruby provision <env>`, `bin/rails console`, and `bin/rails
-rack_attack:status` come straight from the original Rails-flavored
-`kamal_menu()` script this plugin is based on. If your stack differs, edit
-the `case "$ACTION"` branches in `scripts/run.sh` — it's plain bash, one
-`kamal ...` (or arbitrary command) per action.
+`ruby provision <env>` and `bin/rails console` come straight from the
+original Rails-flavored `kamal_menu()` script this plugin is based on. If
+your stack differs, edit the `case "$ACTION"` branches in `scripts/run.sh`
+— it's plain bash, one `kamal ...` (or arbitrary command) per action. (The
+original script's Rack::Attack status check isn't included — too specific
+to one app to generalize; add it back the same way if you use it.)
 
 ## Permissions & dependencies
 

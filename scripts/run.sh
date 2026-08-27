@@ -84,9 +84,6 @@ case "$ACTION" in
   shell)
     run_kamal app exec -i bash "${DEST[@]}"
     ;;
-  rack_attack)
-    run_kamal app exec --reuse 'bin/rails rack_attack:status' "${DEST[@]}"
-    ;;
   details)
     run_kamal details "${DEST[@]}"
     ;;
