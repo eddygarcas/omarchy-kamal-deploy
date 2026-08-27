@@ -111,6 +111,32 @@ off removes that step from the generated script entirely rather than
 leaving it disabled in place — re-run the wizard any time to regenerate with
 different choices; it always overwrites, never merges.
 
+### Deploy config
+
+The same wizard can also generate `config/deploy.yml` itself — the
+`provision` script needs it anyway, since it reads `servers:` from that
+file at runtime to know which hosts to SSH into. Type an **Environment**
+(blank for the base config, or a name like `staging`/`production` for a
+`config/deploy.<env>.yml` override) plus **Role**/**Hosts** (comma-separated
+IPs or hostnames; a second role like `workers` is optional), and click
+**Generate deploy.yml**:
+
+- **Base config** (blank environment) — only offered when
+  `config/deploy.yml` doesn't exist yet. Renders `service`, `image`, and
+  `servers:` from the form, then appends the exact same
+  proxy/registry/builder/env/aliases/ssh/volumes/accessories guidance
+  `kamal init` ships (copied verbatim from the installed `kamal` gem's own
+  template — including its one genuinely-commented-out ERB example line,
+  which is deliberately *not* re-evaluated by this wizard's own ERB pass).
+- **Named environment** — always a minimal, `servers:`-only override, the
+  normal Kamal pattern for adding a destination to an app that already has
+  a base config. Safe to regenerate; only touches that one file.
+
+The wizard will never let you regenerate an existing base config with a
+minimal one — that would silently delete every other setting in it. Want
+to change server IPs in an existing base file? Edit it by hand, or add a
+named environment override instead.
+
 ## Customizing the commands
 
 `ruby provision <env>` and `bin/rails console` come straight from the
@@ -131,10 +157,14 @@ to one app to generalize; add it back the same way if you use it.)
   default terminal for every action — real `kamal`, `ruby`, and shell
   commands, with your real credentials and SSH keys. Review `scripts/run.sh`
   before installing if that matters to you.
-- The Provision Wizard runs `bash scripts/provision-check.sh <folder>`
+- The Provision Wizard runs `bash scripts/provision-check.sh <folder> [env]`
   (read-only) and `bash scripts/generate-provision.sh <folder> <options>`,
   which **writes** `<folder>/provision` (overwriting any existing file with
-  that name) and marks it executable.
+  that name) and marks it executable, and/or
+  `bash scripts/generate-deploy.sh <folder> <env> <options>`, which
+  **writes** `<folder>/config/deploy.yml` or
+  `<folder>/config/deploy.<env>.yml` (refusing to touch an existing base
+  config — see **Deploy config** above).
 - Reads/writes `"eduard.kamal-deploy".searchPaths` in
   `~/.config/omarchy/shell.json`.
 - Like every Quickshell plugin, `Panel.qml` runs unsandboxed inside the
@@ -163,6 +193,9 @@ the widget from your bar layout. It does **not** revert the
 | `scripts/provision-check.sh`    | Read-only pre-flight checks for the Provision Wizard            |
 | `scripts/generate-provision.sh` | Renders `templates/provision.erb` into `<folder>/provision`    |
 | `templates/provision.erb`       | The parameterized provisioning script itself                   |
+| `scripts/generate-deploy.sh`    | Renders `templates/deploy.erb` (+ `deploy-tail.yml` for a new base config) into `config/deploy.yml` or `config/deploy.<env>.yml` |
+| `templates/deploy.erb`          | The `service`/`image`/`servers:` header this wizard controls   |
+| `templates/deploy-tail.yml`     | Verbatim copy of `kamal init`'s proxy/registry/builder/… guidance |
 
 ## License
 

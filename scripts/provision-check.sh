@@ -6,6 +6,7 @@
 set -uo pipefail
 
 DIR="${1:-}"
+DEPLOY_ENV="${2:-}"
 
 if [[ -z "$DIR" ]]; then
   echo '{"dir":"","folderExists":false}'
@@ -60,6 +61,14 @@ fi
 provision_exists=false
 [[ -f "$expanded/provision" ]] && provision_exists=true
 
+base_deploy_exists=false
+[[ -f "$expanded/config/deploy.yml" ]] && base_deploy_exists=true
+
+env_deploy_exists=false
+if [[ -n "$DEPLOY_ENV" ]]; then
+  [[ -f "$expanded/config/deploy.$DEPLOY_ENV.yml" ]] && env_deploy_exists=true
+fi
+
 jq -n \
   --arg dir "$expanded" \
   --argjson configFound "$config_found" \
@@ -69,6 +78,8 @@ jq -n \
   --argjson hasNetSshGem "$has_net_ssh_gem" \
   --argjson sshIdentityCount "$ssh_identity_count" \
   --argjson provisionExists "$provision_exists" \
+  --argjson baseDeployExists "$base_deploy_exists" \
+  --argjson envDeployExists "$env_deploy_exists" \
   '{
     dir: $dir,
     folderExists: true,
@@ -79,5 +90,7 @@ jq -n \
     hasKamalGem: $hasKamalGem,
     hasNetSshGem: $hasNetSshGem,
     sshIdentityCount: $sshIdentityCount,
-    provisionExists: $provisionExists
+    provisionExists: $provisionExists,
+    baseDeployExists: $baseDeployExists,
+    envDeployExists: $envDeployExists
   }'

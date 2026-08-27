@@ -1,0 +1,20 @@
+<%- if include_header -%>
+# Name of your application. Used to uniquely configure containers.
+service: <%= service %>
+
+# Name of the container image.
+image: <%= image %>
+
+<%- end -%>
+# Deploy to these servers.
+servers:
+  <%= web_role %>:
+<%- web_hosts.each do |host| -%>
+    - <%= host %>
+<%- end -%>
+<%- if workers_hosts && !workers_hosts.empty? -%>
+  <%= workers_role %>:
+<%- workers_hosts.each do |host| -%>
+    - <%= host %>
+<%- end -%>
+<%- end -%>

@@ -46,6 +46,7 @@ Panel {
   readonly property var searchPaths: Array.isArray(savedSettings.searchPaths) ? savedSettings.searchPaths : []
 
   readonly property string generateProvisionScript: pluginDir + "/scripts/generate-provision.sh"
+  readonly property string generateDeployScript: pluginDir + "/scripts/generate-deploy.sh"
   readonly property string provisionCheckScript: pluginDir + "/scripts/provision-check.sh"
 
   property var projects: []
@@ -131,11 +132,35 @@ Panel {
   property string wizardResult: ""
   property bool wizardResultIsError: false
 
+  // deploy.yml generation — a second, independent artifact this same
+  // wizard can produce. An empty env targets the base config/deploy.yml
+  // (only offered when one doesn't exist yet); a named env always targets
+  // a minimal, servers-only config/deploy.<env>.yml override, which is
+  // the normal Kamal pattern for adding a destination to an existing app.
+  property string wizardDeployEnv: ""
+  property bool wizardDeployGenerating: false
+  property string wizardDeployResult: ""
+  property bool wizardDeployResultIsError: false
+  readonly property bool wizardDeployTargetIsBase: root.wizardDeployEnv.trim() === ""
+  readonly property bool wizardDeployBlocked: root.wizardDeployTargetIsBase && !!(root.wizardChecks && root.wizardChecks.baseDeployExists)
+  readonly property bool wizardDeployFileExists: root.wizardDeployTargetIsBase
+    ? !!(root.wizardChecks && root.wizardChecks.baseDeployExists)
+    : !!(root.wizardChecks && root.wizardChecks.envDeployExists)
+  readonly property string wizardSuggestedService: {
+    if (root.wizardResolvedPath === "") return ""
+    var parts = root.wizardResolvedPath.split("/").filter(function(s) { return s !== "" })
+    return parts.length > 0 ? parts[parts.length - 1] : ""
+  }
+
   onWizardResolvedPathChanged: if (root.wizardOpen) wizardCheckDebounce.restart()
+  onWizardDeployEnvChanged: if (root.wizardOpen) wizardCheckDebounce.restart()
 
   function openWizard() {
     root.wizardResult = ""
     root.wizardResultIsError = false
+    root.wizardDeployResult = ""
+    root.wizardDeployResultIsError = false
+    root.wizardDeployEnv = ""
     root.wizardChecks = null
     root.wizardCustomPath = ""
     if (root.projects.length > 0) {
@@ -157,7 +182,7 @@ Panel {
     if (!root.wizardTargetValid) { root.wizardChecks = null; return }
     if (checkProcess.running) return
     root.wizardChecking = true
-    checkProcess.command = ["bash", root.provisionCheckScript, root.wizardResolvedPath]
+    checkProcess.command = ["bash", root.provisionCheckScript, root.wizardResolvedPath, root.wizardDeployEnv.trim()]
     checkProcess.running = true
   }
 
@@ -175,6 +200,14 @@ Panel {
     root.wizardResult = ""
     generateProcess.command = ["bash", root.generateProvisionScript, root.wizardResolvedPath, JSON.stringify(options)]
     generateProcess.running = true
+  }
+
+  function generateDeploy(options) {
+    if (!root.wizardTargetValid || root.wizardDeployBlocked || generateDeployProcess.running) return
+    root.wizardDeployGenerating = true
+    root.wizardDeployResult = ""
+    generateDeployProcess.command = ["bash", root.generateDeployScript, root.wizardResolvedPath, root.wizardDeployEnv.trim(), JSON.stringify(options)]
+    generateDeployProcess.running = true
   }
 
   function saveSearchPaths(paths) {
@@ -338,6 +371,26 @@ Panel {
       } else {
         root.wizardResultIsError = true
         root.wizardResult = generateProcess.capturedErr.trim() || ("Failed (exit " + exitCode + ")")
+      }
+    }
+  }
+
+  Process {
+    id: generateDeployProcess
+    property string capturedOut: ""
+    property string capturedErr: ""
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: generateDeployProcess.capturedOut = text }
+    stderr: StdioCollector { waitForEnd: true; onStreamFinished: generateDeployProcess.capturedErr = text }
+    onExited: function(exitCode) {
+      root.wizardDeployGenerating = false
+      if (exitCode === 0) {
+        root.wizardDeployResultIsError = false
+        root.wizardDeployResult = "Created " + generateDeployProcess.capturedOut.trim()
+        root.rescan()
+        root.runWizardChecks()
+      } else {
+        root.wizardDeployResultIsError = true
+        root.wizardDeployResult = generateDeployProcess.capturedErr.trim() || ("Failed (exit " + exitCode + ")")
       }
     }
   }
@@ -907,6 +960,179 @@ Panel {
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.bodySmall
                     wrapMode: Text.WordWrap
+                  }
+                }
+
+                PanelSeparator { visible: root.wizardTargetValid; foreground: root.foreground }
+
+                // ---------- Deploy config ----------
+                Column {
+                  id: deployConfigGroup
+                  width: parent.width
+                  spacing: Style.space(10)
+                  visible: root.wizardTargetValid
+
+                  readonly property var webHosts: (deployWebHostsField.text || "").split(",")
+                    .map(function(s) { return s.trim() }).filter(function(s) { return s !== "" })
+                  readonly property var workersHosts: (deployWorkersHostsField.text || "").split(",")
+                    .map(function(s) { return s.trim() }).filter(function(s) { return s !== "" })
+                  readonly property bool hostsValid: deployConfigGroup.webHosts.length > 0
+                    && deployConfigGroup.webHosts.every(function(h) { return !/\s/.test(h) })
+                    && deployConfigGroup.workersHosts.every(function(h) { return !/\s/.test(h) })
+
+                  PanelSectionHeader { text: "DEPLOY CONFIG"; foreground: root.foreground; fontFamily: root.fontFamily }
+
+                  Text {
+                    width: parent.width
+                    text: "Generates config/deploy.yml (a brand-new project) or config/deploy.<env>.yml (an override for an existing one) — servers plus, for a new base config, the same proxy/registry/builder guidance `kamal init` ships."
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    wrapMode: Text.WordWrap
+                  }
+
+                  Column {
+                    width: parent.width
+                    spacing: Style.space(2)
+                    Text { text: "ENVIRONMENT (blank = base config/deploy.yml)"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
+                    TextField {
+                      id: deployEnvField
+                      width: parent.width
+                      placeholderText: "production, staging, …"
+                      foreground: root.foreground
+                      onTextChanged: root.wizardDeployEnv = text
+                    }
+                  }
+
+                  Text {
+                    width: parent.width
+                    text: "→ config/deploy" + (root.wizardDeployTargetIsBase ? "" : ("." + root.wizardDeployEnv.trim())) + ".yml"
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+
+                  Text {
+                    visible: root.wizardDeployBlocked
+                    width: parent.width
+                    text: "config/deploy.yml already exists — edit it directly, or type an environment name above (e.g. staging) to add an override instead."
+                    color: root.urgent
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    wrapMode: Text.WordWrap
+                  }
+
+                  Text {
+                    visible: !root.wizardDeployBlocked && root.wizardDeployFileExists
+                    width: parent.width
+                    text: "This file already exists — generating will overwrite it."
+                    color: root.urgent
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    wrapMode: Text.WordWrap
+                  }
+
+                  Column {
+                    width: parent.width
+                    spacing: Style.space(10)
+                    visible: !root.wizardDeployBlocked
+
+                    Row {
+                      width: parent.width
+                      spacing: Style.space(8)
+                      visible: root.wizardDeployTargetIsBase
+
+                      Column {
+                        width: (parent.width - parent.spacing) / 2
+                        spacing: Style.space(2)
+                        Text { text: "SERVICE"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
+                        TextField { id: deployServiceField; width: parent.width; text: root.wizardSuggestedService; placeholderText: "my-app"; foreground: root.foreground }
+                      }
+
+                      Column {
+                        width: (parent.width - parent.spacing) / 2
+                        spacing: Style.space(2)
+                        Text { text: "IMAGE"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
+                        TextField { id: deployImageField; width: parent.width; text: root.wizardSuggestedService; placeholderText: "my-user/my-app"; foreground: root.foreground }
+                      }
+                    }
+
+                    Row {
+                      width: parent.width
+                      spacing: Style.space(8)
+
+                      Column {
+                        width: (parent.width - parent.spacing) / 2
+                        spacing: Style.space(2)
+                        Text { text: "ROLE"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
+                        TextField { id: deployWebRoleField; width: parent.width; text: "web"; foreground: root.foreground }
+                      }
+
+                      Column {
+                        width: (parent.width - parent.spacing) / 2
+                        spacing: Style.space(2)
+                        Text { text: "HOSTS"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
+                        TextField { id: deployWebHostsField; width: parent.width; placeholderText: "10.0.1.10, 10.0.1.11"; foreground: root.foreground }
+                      }
+                    }
+
+                    Row {
+                      width: parent.width
+                      spacing: Style.space(8)
+
+                      Column {
+                        width: (parent.width - parent.spacing) / 2
+                        spacing: Style.space(2)
+                        Text { text: "ROLE (optional)"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
+                        TextField { id: deployWorkersRoleField; width: parent.width; text: "workers"; foreground: root.foreground }
+                      }
+
+                      Column {
+                        width: (parent.width - parent.spacing) / 2
+                        spacing: Style.space(2)
+                        Text { text: "HOSTS (optional)"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
+                        TextField { id: deployWorkersHostsField; width: parent.width; placeholderText: "10.0.2.10"; foreground: root.foreground }
+                      }
+                    }
+
+                    Text {
+                      visible: deployWebHostsField.text.trim() !== "" && !deployConfigGroup.hostsValid
+                      width: parent.width
+                      text: "Hosts can't contain spaces — separate multiple hosts with commas."
+                      color: root.urgent
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+
+                    Button {
+                      text: root.wizardDeployGenerating ? "Generating…" : "Generate deploy.yml"
+                      fontSize: Style.font.bodySmall
+                      foreground: root.foreground
+                      fontFamily: root.fontFamily
+                      bordered: true
+                      focusable: true
+                      enabled: deployConfigGroup.hostsValid && !root.wizardDeployGenerating
+                      onClicked: {
+                        root.generateDeploy({
+                          service: deployServiceField.text.trim() || root.wizardSuggestedService || "my-app",
+                          image: deployImageField.text.trim() || deployServiceField.text.trim() || "my-app",
+                          web_role: deployWebRoleField.text.trim() || "web",
+                          web_hosts: deployConfigGroup.webHosts,
+                          workers_role: deployWorkersRoleField.text.trim() || "workers",
+                          workers_hosts: deployConfigGroup.workersHosts
+                        })
+                      }
+                    }
+
+                    Text {
+                      visible: root.wizardDeployResult !== ""
+                      width: parent.width
+                      text: root.wizardDeployResult
+                      color: root.wizardDeployResultIsError ? root.urgent : root.foreground
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.bodySmall
+                      wrapMode: Text.WordWrap
+                    }
                   }
                 }
 
