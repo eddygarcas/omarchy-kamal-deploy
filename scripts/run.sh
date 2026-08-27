@@ -59,6 +59,9 @@ run_kamal() {
 
 case "$ACTION" in
   provision)
+    if [[ ! -f "$PROJECT_DIR/provision" ]]; then
+      die "No provision script in $PROJECT_DIR — run the Provision Wizard for this project first."
+    fi
     echo "\$ ruby provision \"$ENV\""
     ruby provision "$ENV"
     ;;

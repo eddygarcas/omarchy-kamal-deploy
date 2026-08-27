@@ -19,13 +19,11 @@ on any workspace.
 ## Install
 
 ```
-git clone <this-repo> ~/.config/omarchy/plugins/eduard.kamal-deploy
+git clone https://github.com/eddygarcas/omarchy-kamal-deploy.git \
+  ~/.config/omarchy/plugins/eduard.kamal-deploy
 omarchy-shell shell rescanPlugins
 omarchy plugin enable eduard.kamal-deploy
 ```
-
-(Swap the clone URL once this is pushed to its own repo / submitted to the
-Omarchy marketplace.)
 
 ## What it does
 
@@ -40,9 +38,10 @@ Click the bar icon (⚓) to open the panel:
   `deploy.yml`, or the folder name), one row per destination (`default` for
   `config/deploy.yml`, `<env>` for each `config/deploy.<env>.yml`). Click a
   row to drop down its actions:
-  - **Deploy** — Provision (`ruby provision <env>`), Setup (`kamal setup
-    -v`), Deploy (`kamal lock release` then `kamal deploy -v`), Rollback
-    (`kamal rollback`).
+  - **Deploy** — Provision (`ruby provision <env>` — only enabled once a
+    `provision` script exists in that project, see **Provision Wizard**
+    below), Setup (`kamal setup -v`), Deploy (`kamal lock release` then
+    `kamal deploy -v`), Rollback (`kamal rollback`).
   - **Application** — Tail logs (`kamal app logs -f`), Rails console (`kamal
     app exec -i 'bin/rails console'`), Bash shell (`kamal app exec -i
     bash`), Rack attack status (`kamal app exec --reuse 'bin/rails
@@ -63,6 +62,34 @@ running one instead of piling up windows. That's what makes `kamal app exec
 work correctly — they need a real TTY, which a fake in-panel console
 couldn't give them.
 
+## Provision Wizard
+
+Click **+** next to the rescan button (↻) to open the wizard for setting up
+a brand-new server. It:
+
+1. **Target folder** — pick one of your discovered projects, or type a
+   custom path (for a project not scanned yet).
+2. **Checks** — runs `scripts/provision-check.sh` against that folder and
+   shows: does `config/deploy.yml` (or `deploy.<env>.yml`) exist, does the
+   `Gemfile` have the `kamal` and `net-ssh` gems, does `ssh-add -l` show a
+   loaded key, and whether a `provision` file is already there (would be
+   overwritten).
+3. **Tailor** — swap size, storage path/owner, extra firewall ports beyond
+   22, Docker log rotation size/count, ulimit, and four toggles (UFW,
+   fail2ban, unattended-upgrades, SSH hardening).
+4. **Generate** — renders `templates/provision.erb` with those choices via
+   `scripts/generate-provision.sh` (plain Ruby `ERB`, no gems needed beyond
+   the stdlib) into `<target>/provision`, `chmod +x`, then rescans so the
+   project's **Provision** button lights up immediately.
+
+The template itself is the user's own Scaleway/Ubuntu Kamal provisioning
+script (idempotent SSH-based steps: essentials, swap, storage dir, Docker +
+`kamal` network, then the four toggleable hardening steps, then Docker
+daemon log rotation), parameterized instead of hardcoded. A toggle turned
+off removes that step from the generated script entirely rather than
+leaving it disabled in place — re-run the wizard any time to regenerate with
+different choices; it always overwrites, never merges.
+
 ## Customizing the commands
 
 `ruby provision <env>`, `bin/rails console`, and `bin/rails
@@ -73,14 +100,19 @@ the `case "$ACTION"` branches in `scripts/run.sh` — it's plain bash, one
 
 ## Permissions & dependencies
 
-- Requires `kamal`, `jq`, `find`, `md5sum`, and `awk` on `PATH` (all standard
-  on an Omarchy/Arch install; `jq` ships with the plugin's own scan step).
+- Requires `kamal`, `jq`, `find`, `md5sum`, `awk`, and `ruby` (stdlib `erb` +
+  `json`, no gems) on `PATH` (all standard on an Omarchy/Arch install with
+  Kamal already set up).
 - Runs `bash scripts/discover.sh <folders...>` to scan the filesystem and
   cache results at `$XDG_RUNTIME_DIR/eduard.kamal-deploy/targets.json`.
 - Runs `bash scripts/run.sh <target> <action> [accessory]` inside your
   default terminal for every action — real `kamal`, `ruby`, and shell
   commands, with your real credentials and SSH keys. Review `scripts/run.sh`
   before installing if that matters to you.
+- The Provision Wizard runs `bash scripts/provision-check.sh <folder>`
+  (read-only) and `bash scripts/generate-provision.sh <folder> <options>`,
+  which **writes** `<folder>/provision` (overwriting any existing file with
+  that name) and marks it executable.
 - Reads/writes `"eduard.kamal-deploy".searchPaths` in
   `~/.config/omarchy/shell.json`.
 - Like every Quickshell plugin, `Panel.qml` runs unsandboxed inside the
@@ -99,13 +131,16 @@ the widget from your bar layout. It does **not** revert the
 
 ## Files
 
-| File                        | Purpose                                                     |
-|-----------------------------|---------------------------------------------------------------|
-| `manifest.json`             | Plugin manifest (`bar-widget`)                                |
-| `Panel.qml`                 | Bar icon + task-list panel UI                                  |
-| `scripts/discover.sh`       | Scans search folders for `config/deploy*.yml`, prints/caches JSON |
-| `scripts/run.sh`            | Resolves a clicked target and runs the matching `kamal`/`ruby` command |
-| `scripts/detect-common.sh`  | Lists common project-folder names that exist under `$HOME`     |
+| File                            | Purpose                                                     |
+|---------------------------------|---------------------------------------------------------------|
+| `manifest.json`                 | Plugin manifest (`bar-widget`)                                |
+| `Panel.qml`                     | Bar icon + task-list panel UI + Provision Wizard                |
+| `scripts/discover.sh`           | Scans search folders for `config/deploy*.yml`, prints/caches JSON |
+| `scripts/run.sh`                | Resolves a clicked target and runs the matching `kamal`/`ruby` command |
+| `scripts/detect-common.sh`      | Lists common project-folder names that exist under `$HOME`     |
+| `scripts/provision-check.sh`    | Read-only pre-flight checks for the Provision Wizard            |
+| `scripts/generate-provision.sh` | Renders `templates/provision.erb` into `<folder>/provision`    |
+| `templates/provision.erb`       | The parameterized provisioning script itself                   |
 
 ## License
 
