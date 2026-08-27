@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "eduard.kamal-deploy",
   "name": "Kamal Deploy",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "author": "Eduard G. Castelló",
   "license": "MIT",
   "homepage": "https://github.com/eddygarcas/omarchy-kamal-deploy",
-  "description": "Discover Kamal deploy.<env>.yml targets under your project folders, check any number of them across one or many projects, and run setup, deploy, logs, console, accessory, and lock actions against all of them at once — each opens your default terminal so you never have to open one yourself. Includes a Provision Wizard that generates a tailored server-setup script and, optionally, config/deploy.yml itself.",
+  "description": "Discover Kamal deploy.<env>.yml targets under your project folders, check any number of them across one or many projects, and run setup, deploy, logs, console, accessory, and lock actions against all of them at once. Most actions run in the background with a spinner and a console-styled result card; a few that need a real terminal (interactive console/shell, tailing logs, rollback) open one for you. Includes a Provision Wizard that generates a tailored server-setup script and, optionally, config/deploy.yml itself.",
   "kinds": [
     "bar-widget"
   ],

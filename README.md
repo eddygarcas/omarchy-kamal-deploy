@@ -72,18 +72,33 @@ Click the bar icon (a compass) to open the panel:
     script).
 
   Clicking any action runs it once per checked target — a `staging` +
-  `production` selection opens two terminals for **Deploy**, one per
-  destination, since each needs its own `kamal ... -d <env>` in its own
-  project directory; they can't be merged into a single command.
+  `production` selection queues (or opens) two of whatever that action
+  uses, one per destination, since each needs its own `kamal ... -d <env>`
+  in its own project directory; they can't be merged into a single command.
 
-Every action shells out to `scripts/run.sh`, opened via
-`omarchy-launch-or-focus-tui` — your actual default terminal (foot, kitty,
-alacritty, ghostty, whatever `xdg-terminal-exec` resolves to), with a stable
-per-target-per-action window so clicking the same action twice on the same
-target refocuses the running one instead of piling up windows. That's what
-makes `kamal app exec -i`, `rollback`'s interactive prompts, SSH passphrase
-prompts, and `logs -f` work correctly — they need a real TTY, which a fake
-in-panel console couldn't give them.
+**Most actions never open a terminal at all.** Provision, Setup, Deploy,
+Restart, Details, Lock status, Release lock, Audit log, and every
+accessory action except its own Logs run in the background — a spinner
+appears under **RESULTS** while it's in flight, then the real command's
+output (and exit status) renders in a scrollable console-styled card you
+can dismiss whenever you're done reading it, or clear in bulk once a batch
+finishes. A handful of actions still open a real terminal, because they
+either need genuine interactive input or never finish on their own: Tail
+logs and an accessory's own Logs (`-f`, streams forever), Rails console and
+Bash shell (`kamal app exec -i`, a real interactive session), and Rollback
+(prompts you to pick a version). Those go through `scripts/run.sh`, opened
+via `omarchy-launch-or-focus-tui` — your actual default terminal (foot,
+kitty, alacritty, ghostty, whatever `xdg-terminal-exec` resolves to), with
+a stable per-target-per-action window so clicking the same action twice on
+the same target refocuses the running one instead of piling up windows.
+
+Both paths resolve a clicked target the same way, through
+`$XDG_RUNTIME_DIR/eduard.kamal-deploy/targets.json` (written by the last
+scan) — a background run just calls `scripts/run-background.sh` (no
+terminal, no colors, no "press any key" pause, plain captured
+stdout/stderr) instead of `scripts/run.sh`; both share the actual
+action→command mapping from `scripts/dispatch.sh` so the two paths can't
+drift apart on what a given action actually runs.
 
 ## Provision Wizard
 
@@ -162,8 +177,11 @@ named environment override instead.
 
 `ruby provision <env>` and `bin/rails console` come straight from the
 original Rails-flavored `kamal_menu()` script this plugin is based on. If
-your stack differs, edit the `case "$ACTION"` branches in `scripts/run.sh`
-— it's plain bash, one `kamal ...` (or arbitrary command) per action. (The
+your stack differs, edit the `case "$ACTION"` branches in
+`scripts/dispatch.sh` — it's plain bash, one `kamal ...` (or arbitrary
+command) per action, shared by both `scripts/run.sh` (terminal actions) and
+`scripts/run-background.sh` (background actions), so a change here applies
+to whichever of the two a given action actually runs through. (The
 original script's Rack::Attack status check isn't included — too specific
 to one app to generalize; add it back the same way if you use it.)
 
@@ -178,9 +196,15 @@ to one app to generalize; add it back the same way if you use it.)
   directory listing) on Tab, restricted to `$HOME` the same way every write
   path in this plugin is.
 - Runs `bash scripts/run.sh <target> <action> [accessory]` inside your
-  default terminal for every action — real `kamal`, `ruby`, and shell
-  commands, with your real credentials and SSH keys. Review `scripts/run.sh`
-  before installing if that matters to you.
+  default terminal for Tail logs / Rails console / Bash shell / Rollback /
+  an accessory's own Logs — real `kamal`, `ruby`, and shell commands, with
+  your real credentials and SSH keys. Every other action runs the same way
+  through `bash scripts/run-background.sh <target> <action> [accessory]`
+  instead, captured (not shown live) by the panel rather than opened in a
+  terminal — same commands, same credentials, just no TTY; it refuses to
+  run any of the terminal-only actions itself as a second guard against
+  that mismatch. Review `scripts/dispatch.sh` (what each action actually
+  runs) before installing if that matters to you.
 - The Provision Wizard runs `bash scripts/provision-check.sh <folder> [env]`
   (read-only) and `bash scripts/generate-provision.sh <folder> <options>`,
   which **writes** `<folder>/provision` (overwriting any existing file with
@@ -212,7 +236,10 @@ the widget from your bar layout. It does **not** revert the
 | `manifest.json`                 | Plugin manifest (`bar-widget`)                                |
 | `Panel.qml`                     | Bar icon + task-list panel UI + Provision Wizard                |
 | `scripts/discover.sh`           | Scans search folders for `config/deploy*.yml`, prints/caches JSON |
-| `scripts/run.sh`                | Resolves a clicked target and runs the matching `kamal`/`ruby` command |
+| `scripts/dispatch.sh`           | Shared action→`kamal`/`ruby` command mapping, sourced by both scripts below |
+| `scripts/run.sh`                | Resolves a clicked target, runs it in a real terminal (interactive/streaming actions) |
+| `scripts/run-background.sh`     | Same resolution, runs in the background instead, output captured for the panel |
+| `scripts/complete-path.sh`      | Read-only Tab-completion for the panel's folder fields          |
 | `scripts/detect-common.sh`      | Lists common project-folder names that exist under `$HOME`     |
 | `scripts/provision-check.sh`    | Read-only pre-flight checks for the Provision Wizard            |
 | `scripts/generate-provision.sh` | Renders `templates/provision.erb` into `<folder>/provision`    |

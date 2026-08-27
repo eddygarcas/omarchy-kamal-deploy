@@ -39,6 +39,7 @@ Panel {
   readonly property string pluginDir: home + "/.config/omarchy/plugins/eduard.kamal-deploy"
   readonly property string discoverScript: pluginDir + "/scripts/discover.sh"
   readonly property string runScript: pluginDir + "/scripts/run.sh"
+  readonly property string runBackgroundScript: pluginDir + "/scripts/run-background.sh"
 
   readonly property var savedSettings: bar && bar.shell && bar.shell.shellConfig
     && bar.shell.shellConfig["eduard.kamal-deploy"] && typeof bar.shell.shellConfig["eduard.kamal-deploy"] === "object"
@@ -116,8 +117,8 @@ Panel {
     root.selectedTargetIds = next
   }
 
-  function launchSelected(action, extra) {
-    root.selectedIds.forEach(function(id) { root.launch(id, action, extra) })
+  function launchSelected(action, extra, background) {
+    root.selectedIds.forEach(function(id) { root.launch(id, action, extra, background) })
   }
 
   // ---------------------------------------------------------- provision wizard
@@ -298,11 +299,99 @@ Panel {
     }
   }
 
-  function launch(targetId, action, extra) {
+  function launch(targetId, action, extra, background) {
+    if (background) {
+      root.runBackgroundJob(targetId, action, extra)
+      return
+    }
     var appId = "org.omarchy.kamal-deploy." + targetId + "." + action + (extra ? ("." + extra) : "")
     var args = ["omarchy-launch-or-focus-tui", "--app-id=" + appId, "bash", root.runScript, targetId, action]
     if (extra) args.push(extra)
     Quickshell.execDetached(args)
+  }
+
+  // ------------------------------------------------------ background jobs
+  // Actions that always run to completion on their own (no interactive
+  // input, no forever-streaming output — see run-background.sh's own
+  // refuse-list for the exact boundary) run here instead of opening a
+  // terminal: a spinner while the Process is alive, then its captured
+  // output rendered in a console-styled card. Newest job first; each is
+  // independently dismissible.
+  property var backgroundJobs: []
+  property int backgroundJobSeq: 0
+
+  readonly property var actionLabels: ({
+    provision: "Provision", setup: "Setup", deploy: "Deploy", rollback: "Rollback",
+    logs: "Tail logs", console: "Rails console", shell: "Bash shell", restart: "Restart",
+    details: "Details", audit: "Audit log", lock_status: "Lock status", lock_release: "Release lock",
+    accessory_boot: "Boot", accessory_reboot: "Reboot", accessory_stop: "Stop",
+    accessory_restart: "Restart", accessory_logs: "Logs", accessory_remove: "Remove"
+  })
+
+  function stripAnsi(s) {
+    return String(s || "").replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")
+  }
+
+  function runBackgroundJob(targetId, action, extra) {
+    var entry = root.targetIndex[targetId]
+    if (!entry) return
+    var jobId = "job" + (root.backgroundJobSeq++)
+    var job = {
+      id: jobId,
+      projectName: entry.project.name || "project",
+      envLabel: entry.env.label || "default",
+      actionLabel: (root.actionLabels[action] || action) + (extra ? (" (" + extra + ")") : ""),
+      status: "running",
+      output: "",
+      exitCode: null
+    }
+    root.backgroundJobs = [job].concat(root.backgroundJobs)
+    var args = [root.runBackgroundScript, targetId, action]
+    if (extra) args.push(extra)
+    var proc = backgroundJobComponent.createObject(root, { jobId: jobId, command: ["bash"].concat(args) })
+    proc.running = true
+  }
+
+  function updateBackgroundJob(jobId, patch) {
+    root.backgroundJobs = root.backgroundJobs.map(function(j) {
+      if (j.id !== jobId) return j
+      var next = {}
+      for (var k in j) next[k] = j[k]
+      for (var k2 in patch) next[k2] = patch[k2]
+      return next
+    })
+  }
+
+  function dismissBackgroundJob(jobId) {
+    root.backgroundJobs = root.backgroundJobs.filter(function(j) { return j.id !== jobId })
+  }
+
+  function clearFinishedBackgroundJobs() {
+    root.backgroundJobs = root.backgroundJobs.filter(function(j) { return j.status === "running" })
+  }
+
+  Component {
+    id: backgroundJobComponent
+    Process {
+      id: bgProc
+      property string jobId: ""
+      property string capturedOut: ""
+      property string capturedErr: ""
+      stdout: StdioCollector { waitForEnd: true; onStreamFinished: bgProc.capturedOut = text }
+      stderr: StdioCollector { waitForEnd: true; onStreamFinished: bgProc.capturedErr = text }
+      onExited: function(exitCode) {
+        var combined = bgProc.capturedOut
+        if (bgProc.capturedErr.trim() !== "") {
+          combined += (combined !== "" && combined.slice(-1) !== "\n" ? "\n" : "") + bgProc.capturedErr
+        }
+        root.updateBackgroundJob(bgProc.jobId, {
+          status: exitCode === 0 ? "done" : "failed",
+          output: root.stripAnsi(combined).trim(),
+          exitCode: exitCode
+        })
+        bgProc.destroy()
+      }
+    }
   }
 
   // Fixed, theme-independent brand colors — like GitHub's per-language dots,
@@ -673,10 +762,10 @@ Panel {
               width: parent.width
               heading: "DEPLOY"
               actions: [
-                { label: "Provision", action: "provision", icon: "", enabled: root.selectedHasProvision,
+                { label: "Provision", action: "provision", icon: "", background: true, enabled: root.selectedHasProvision,
                   disabledReason: "Not every selected target has a provision script — run the Provision Wizard for the ones that don't." },
-                { label: "Setup", action: "setup", icon: "" },
-                { label: "Deploy", action: "deploy", icon: "" },
+                { label: "Setup", action: "setup", icon: "", background: true },
+                { label: "Deploy", action: "deploy", icon: "", background: true },
                 { label: "Rollback", action: "rollback", icon: "" }
               ]
             }
@@ -688,8 +777,8 @@ Panel {
                 { label: "Tail logs", action: "logs", icon: "" },
                 { label: "Rails console", action: "console", icon: "" },
                 { label: "Bash shell", action: "shell", icon: "" },
-                { label: "Restart", action: "restart", icon: "" },
-                { label: "Details", action: "details", icon: "" }
+                { label: "Restart", action: "restart", icon: "", background: true },
+                { label: "Details", action: "details", icon: "", background: true }
               ]
             }
 
@@ -697,9 +786,9 @@ Panel {
               width: parent.width
               heading: "OPERATIONS"
               actions: [
-                { label: "Lock status", action: "lock_status", icon: "" },
-                { label: "Release lock", action: "lock_release", icon: "" },
-                { label: "Audit log", action: "audit", icon: "" }
+                { label: "Lock status", action: "lock_status", icon: "", background: true },
+                { label: "Release lock", action: "lock_release", icon: "", background: true },
+                { label: "Audit log", action: "audit", icon: "", background: true }
               ]
             }
 
@@ -745,12 +834,12 @@ Panel {
 
                 Repeater {
                   model: [
-                    { label: "Boot", action: "accessory_boot", icon: "" },
-                    { label: "Reboot", action: "accessory_reboot", icon: "" },
-                    { label: "Stop", action: "accessory_stop", icon: "" },
-                    { label: "Restart", action: "accessory_restart", icon: "" },
+                    { label: "Boot", action: "accessory_boot", icon: "", background: true },
+                    { label: "Reboot", action: "accessory_reboot", icon: "", background: true },
+                    { label: "Stop", action: "accessory_stop", icon: "", background: true },
+                    { label: "Restart", action: "accessory_restart", icon: "", background: true },
                     { label: "Logs", action: "accessory_logs", icon: "" },
-                    { label: "Remove", action: "accessory_remove", icon: "" }
+                    { label: "Remove", action: "accessory_remove", icon: "", background: true }
                   ]
 
                   Button {
@@ -763,7 +852,7 @@ Panel {
                     bordered: true
                     focusable: true
                     enabled: bulkAccessoryGroup.accessoryValid
-                    onClicked: root.launchSelected(modelData.action, bulkAccessoryGroup.accessoryValue)
+                    onClicked: root.launchSelected(modelData.action, bulkAccessoryGroup.accessoryValue, modelData.background === true)
                   }
                 }
               }
@@ -796,6 +885,52 @@ Panel {
             bottomPadding: Style.space(16)
           }
           } // mainView
+
+          Column {
+            id: backgroundResults
+            width: column.width
+            spacing: Style.space(10)
+            visible: root.backgroundJobs.length > 0
+
+            PanelSeparator { foreground: root.foreground }
+
+            Item {
+              width: parent.width
+              height: Math.max(resultsHeader.implicitHeight, clearFinishedButton.implicitHeight)
+
+              PanelSectionHeader {
+                id: resultsHeader
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: "RESULTS"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+              }
+
+              Button {
+                id: clearFinishedButton
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.backgroundJobs.some(function(j) { return j.status !== "running" })
+                text: "Clear finished"
+                fontSize: Style.font.caption
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                bordered: true
+                focusable: true
+                onClicked: root.clearFinishedBackgroundJobs()
+              }
+            }
+
+            Repeater {
+              model: root.backgroundJobs
+              delegate: BackgroundJobCard {
+                width: backgroundResults.width
+                required property var modelData
+                job: modelData
+              }
+            }
+          }
 
           Loader {
             id: wizardLoader
@@ -1511,7 +1646,123 @@ Panel {
           bordered: true
           focusable: true
           enabled: modelData.enabled !== false
-          onClicked: root.launchSelected(modelData.action)
+          onClicked: root.launchSelected(modelData.action, undefined, modelData.background === true)
+        }
+      }
+    }
+  }
+
+  // One background-job result: a spinner while running, then a check/✕
+  // status line and a scrollable console-styled box with whatever the
+  // script printed (ANSI already stripped in updateBackgroundJob).
+  component BackgroundJobCard: Column {
+    id: card
+    property var job: ({})
+    width: parent.width
+    spacing: Style.space(6)
+
+    readonly property color statusColor: job.status === "running" ? root.foreground
+      : (job.status === "done" ? "#4CAF50" : root.urgent)
+
+    Rectangle {
+      width: parent.width
+      height: cardHeader.implicitHeight + Style.space(16)
+      radius: Style.cornerRadius
+      color: Qt.rgba(0, 0, 0, 0.18)
+      border.width: 1
+      border.color: Qt.rgba(card.statusColor.r, card.statusColor.g, card.statusColor.b, 0.5)
+
+      Row {
+        id: cardHeader
+        anchors.left: parent.left
+        anchors.right: dismissButton.left
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.margins: Style.space(8)
+        anchors.rightMargin: Style.space(4)
+        spacing: Style.space(8)
+
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          text: card.job.status === "running" ? "" : (card.job.status === "done" ? "✓" : "✕")
+          color: card.statusColor
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          font.bold: true
+
+          RotationAnimator on rotation {
+            running: card.job.status === "running"
+            loops: Animation.Infinite
+            from: 0
+            to: 360
+            duration: 900
+          }
+        }
+
+        Column {
+          anchors.verticalCenter: parent.verticalCenter
+          width: parent.width - Style.space(32)
+          spacing: 0
+
+          Text {
+            width: parent.width
+            text: card.job.projectName + " / " + card.job.envLabel + " — " + card.job.actionLabel
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          Text {
+            visible: card.job.status !== "running"
+            text: card.job.status === "done" ? "done" : ("exit " + card.job.exitCode)
+            color: card.statusColor
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+        }
+      }
+
+      PanelActionButton {
+        id: dismissButton
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.margins: Style.space(8)
+        iconText: "✕"
+        tooltipText: "Dismiss"
+        foreground: root.foreground
+        focusable: true
+        onClicked: root.dismissBackgroundJob(card.job.id)
+      }
+    }
+
+    Rectangle {
+      visible: card.job.output.trim() !== ""
+      width: parent.width
+      height: Math.min(consoleFlick.contentHeight + Style.space(16), Style.space(220))
+      radius: Style.cornerRadius
+      color: Qt.rgba(0, 0, 0, 0.35)
+      clip: true
+
+      Flickable {
+        id: consoleFlick
+        anchors.fill: parent
+        anchors.margins: Style.space(8)
+        contentWidth: width
+        contentHeight: consoleText.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+        Text {
+          id: consoleText
+          width: consoleFlick.width
+          text: card.job.output
+          color: "#D0D0D0"
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          wrapMode: Text.Wrap
+          textFormat: Text.PlainText
         }
       }
     }

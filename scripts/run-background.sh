@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Runs one Kamal action against one discovered target, inside the terminal
-# omarchy-launch-or-focus-tui opened for it. Looks the target up in the cache
-# discover.sh just wrote, so the panel never has to smuggle a project path
-# (which might contain spaces) through the launcher's word-splitting.
+# Same target resolution and action dispatch as run.sh, but for actions
+# that always run to completion on their own — no real terminal, no
+# colors, no "press any key to close" pause. The panel runs this as a
+# background Process, shows a spinner while it's alive, and renders
+# whatever it printed once it exits. Actions that need real interactive
+# input (Console/Bash shell, Rollback's version picker) or stream forever
+# (Tail logs, an accessory's own -f logs) are refused here — those still
+# only run through run.sh's real terminal.
 set -uo pipefail
 
 CACHE_FILE="${XDG_RUNTIME_DIR:-/tmp}/eduard.kamal-deploy/targets.json"
@@ -10,27 +14,18 @@ TARGET_ID="${1:-}"
 ACTION="${2:-}"
 EXTRA="${3:-}"
 
-bold() { printf '\033[1m%s\033[0m\n' "$1"; }
-green() { printf '\033[32m%s\033[0m\n' "$1"; }
-red() { printf '\033[31m%s\033[0m\n' "$1"; }
-dim() { printf '\033[2m%s\033[0m\n' "$1"; }
-
-pause_exit() {
-  echo
-  read -n1 -rsp "Press any key to close..."
-  echo
-  exit "${1:-0}"
-}
-
 die() {
-  red "$1"
-  pause_exit 1
+  echo "$1" >&2
+  exit 1
 }
 
-if [[ -z "$TARGET_ID" || -z "$ACTION" ]]; then
-  red "Usage: run.sh <target_id> <action> [extra]"
-  pause_exit 1
-fi
+case "$ACTION" in
+  console|shell|logs|accessory_logs|rollback)
+    die "This action needs a real terminal — it can't run in the background."
+    ;;
+esac
+
+[[ -z "$TARGET_ID" || -z "$ACTION" ]] && die "Usage: run-background.sh <target_id> <action> [extra]"
 
 [[ -f "$CACHE_FILE" ]] || die "No Kamal targets discovered yet — open the Kamal Deploy panel first."
 
@@ -48,10 +43,6 @@ command -v kamal >/dev/null 2>&1 || die "kamal is not on PATH in $PROJECT_DIR (c
 DEST=()
 [[ -n "$ENV" ]] && DEST=(-d "$ENV")
 
-bold "== ${PROJECT_NAME:-$(basename "$PROJECT_DIR")} . ${LABEL:-default} =="
-dim "$PROJECT_DIR"
-echo
-
 run_kamal() {
   echo "\$ kamal $*"
   kamal "$@"
@@ -59,11 +50,4 @@ run_kamal() {
 
 source "$(dirname "${BASH_SOURCE[0]}")/dispatch.sh"
 dispatch_action
-status=$?
-echo
-if [[ $status -eq 0 ]]; then
-  green "done"
-else
-  red "exited with status $status"
-fi
-pause_exit "$status"
+exit $?
