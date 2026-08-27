@@ -18,12 +18,36 @@ else
 fi
 CACHE_FILE="$CACHE_DIR/targets.json"
 
-cache_dir_is_safe() {
+# True only if $CACHE_DIR exists, isn't a symlink, and is owned by us —
+# the one check that must never be "fixed", only refused: a different
+# owner means someone else controls this path, full stop.
+cache_dir_is_ours() {
   [[ -d "$CACHE_DIR" && ! -L "$CACHE_DIR" ]] || return 1
-  local owner perm
+  local owner
   owner="$(stat -c '%u' "$CACHE_DIR" 2>/dev/null)" || return 1
+  [[ "$owner" == "$UID" ]]
+}
+
+# Full safety check: ours AND locked to owner-only (0700). Loose
+# permissions alone on a directory we already own — e.g. one created by
+# an older version of this plugin, before this was enforced, with
+# whatever the ambient umask produced — aren't a sign of tampering the
+# way a wrong owner is, so they're safe to self-heal (see
+# ensure_cache_dir_safe) rather than refuse outright.
+cache_dir_is_safe() {
+  cache_dir_is_ours || return 1
+  local perm
   perm="$(stat -c '%a' "$CACHE_DIR" 2>/dev/null)" || return 1
-  [[ "$owner" == "$UID" ]] || return 1
-  [[ "$perm" == "700" ]] || return 1
-  return 0
+  [[ "$perm" == "700" ]]
+}
+
+# Creates $CACHE_DIR if missing and tightens it to owner-only if we
+# already own it (mkdir -p's own -m only applies on *creation*, so an
+# existing directory from before this permission was enforced needs an
+# explicit chmod too). Only discover.sh, the sole writer, should call
+# this — readers just check cache_dir_is_safe.
+ensure_cache_dir_safe() {
+  mkdir -p "$CACHE_DIR" 2>/dev/null
+  cache_dir_is_ours && chmod 700 "$CACHE_DIR" 2>/dev/null
+  cache_dir_is_safe
 }

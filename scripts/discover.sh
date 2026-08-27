@@ -6,8 +6,7 @@
 set -uo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/cache-dir.sh"
-mkdir -p -m 700 "$CACHE_DIR" 2>/dev/null
-if ! cache_dir_is_safe; then
+if ! ensure_cache_dir_safe; then
   echo "Refusing to use unsafe cache directory: $CACHE_DIR" >&2
   echo "[]"
   exit 0
