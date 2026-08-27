@@ -294,26 +294,27 @@ Panel {
             }
 
             trailingControl: Component {
-              Row {
-                spacing: Style.space(6)
-
-                PanelActionButton {
-                  iconText: "+"
-                  tooltipText: "Provision Wizard — set up a new server"
-                  foreground: root.foreground
-                  focusable: true
-                  onClicked: root.openWizard()
-                }
-
-                PanelActionButton {
-                  iconText: "↻"
-                  tooltipText: "Rescan"
-                  foreground: root.foreground
-                  focusable: true
-                  onClicked: root.rescan()
-                }
+              PanelActionButton {
+                iconText: "↻"
+                tooltipText: "Rescan"
+                foreground: root.foreground
+                focusable: true
+                onClicked: root.rescan()
               }
             }
+          }
+
+          Button {
+            width: parent.width
+            leftAlign: true
+            iconText: "+"
+            text: "Provision Wizard — set up a new server"
+            fontSize: Style.font.bodySmall
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            bordered: true
+            focusable: true
+            onClicked: root.openWizard()
           }
 
           PanelSeparator { foreground: root.foreground }
