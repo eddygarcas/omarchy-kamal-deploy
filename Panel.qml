@@ -34,6 +34,12 @@ Panel {
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property color dim: Qt.darker(foreground, 1.4)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+  // Style.cornerRadius mirrors the system's Hyprland window rounding, which
+  // can be as low as 0-2px — too subtle to read as "rounded" on a button.
+  // Floor it so every button in this panel stays visibly rounded regardless
+  // of that system setting, while still growing with it if the user prefers
+  // more rounding overall.
+  readonly property int buttonRadius: Math.max(Style.cornerRadius, Style.space(8))
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string pluginDir: home + "/.config/omarchy/plugins/eduard.kamal-deploy"
@@ -317,9 +323,13 @@ Panel {
   // refuse-list for the exact boundary) run here instead of opening a
   // terminal: a spinner while the Process is alive, then its captured
   // output rendered in a console-styled card. Newest job first; each is
-  // independently dismissible.
+  // independently dismissible — dismissing a still-running job kills it
+  // (see dismissBackgroundJob).
   property var backgroundJobs: []
   property int backgroundJobSeq: 0
+  // jobId -> live Process, so a dismiss can find and terminate one that's
+  // still running. Not used in any binding, so plain mutation is fine.
+  property var backgroundProcs: ({})
 
   readonly property var actionLabels: ({
     provision: "Provision", setup: "Setup", deploy: "Deploy", rollback: "Rollback",
@@ -333,11 +343,21 @@ Panel {
     return String(s || "").replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")
   }
 
+  // Job output can be arbitrary bytes from a remote deploy target — never
+  // build a shell command by concatenating it in unquoted. Util.shellQuote
+  // single-quotes it for bash, same pattern the network panel's own
+  // copy-to-clipboard uses.
+  function copyBackgroundJobOutput(text) {
+    if (!text || text.trim() === "") return
+    Quickshell.execDetached(["bash", "-c", "printf %s " + Util.shellQuote(text) + " | wl-copy"])
+  }
+
   function startBackgroundJob(labelText, args) {
     var jobId = "job" + (root.backgroundJobSeq++)
     var job = { id: jobId, label: labelText, status: "running", output: "", exitCode: null }
     root.backgroundJobs = [job].concat(root.backgroundJobs)
     var proc = backgroundJobComponent.createObject(root, { jobId: jobId, command: args })
+    root.backgroundProcs[jobId] = proc
     proc.running = true
   }
 
@@ -385,6 +405,10 @@ Panel {
   }
 
   function dismissBackgroundJob(jobId) {
+    var proc = root.backgroundProcs[jobId]
+    // SIGTERM; onExited still fires (job is already gone from the list by
+    // then, so updateBackgroundJob is a harmless no-op) and destroys it.
+    if (proc && proc.running) proc.running = false
     root.backgroundJobs = root.backgroundJobs.filter(function(j) { return j.id !== jobId })
   }
 
@@ -411,6 +435,7 @@ Panel {
           output: root.stripAnsi(combined).trim(),
           exitCode: exitCode
         })
+        delete root.backgroundProcs[bgProc.jobId]
         bgProc.destroy()
       }
     }
@@ -620,6 +645,7 @@ Panel {
                 spacing: Style.space(6)
 
                 PanelActionButton {
+                  radius: root.buttonRadius
                   visible: !!(root.updateInfo && root.updateInfo.updateAvailable)
                   iconText: ""
                   fontSize: Style.font.iconLarge
@@ -633,6 +659,7 @@ Panel {
                 }
 
                 PanelActionButton {
+                  radius: root.buttonRadius
                   iconText: "↻"
                   fontSize: Style.font.iconLarge
                   tooltipText: "Rescan"
@@ -645,6 +672,7 @@ Panel {
           }
 
           Button {
+            radius: root.buttonRadius
             width: parent.width
             leftAlign: true
             iconText: "+"
@@ -684,6 +712,7 @@ Panel {
                 }
 
                 PanelActionButton {
+                  radius: root.buttonRadius
                   id: removeBtn
                   iconText: "✕"
                   tooltipText: "Remove"
@@ -712,6 +741,7 @@ Panel {
                 spacing: Style.space(8)
 
                 Button {
+                  radius: root.buttonRadius
                   id: addBtn
                   text: "Add"
                   fontSize: Style.font.bodySmall
@@ -723,6 +753,7 @@ Panel {
                 }
 
                 Button {
+                  radius: root.buttonRadius
                   id: detectBtn
                   text: "Detect"
                   tooltipText: "Look for common project folders (Code, Projects, dev, …)"
@@ -755,6 +786,7 @@ Panel {
             visible: root.projects.length > 0
 
             Button {
+              radius: root.buttonRadius
               text: "Select all"
               fontSize: Style.font.bodySmall
               foreground: root.foreground
@@ -765,6 +797,7 @@ Panel {
             }
 
             Button {
+              radius: root.buttonRadius
               text: "Clear"
               fontSize: Style.font.bodySmall
               foreground: root.foreground
@@ -815,6 +848,7 @@ Panel {
                 Repeater {
                   model: root.selectedIds
                   Button {
+                    radius: root.buttonRadius
                     property string tid: modelData
                     readonly property var entry: root.targetIndex[tid]
                     text: (entry ? (entry.project.name + " / " + (entry.env.label || "default")) : tid) + "  ✕"
@@ -923,6 +957,7 @@ Panel {
                   ]
 
                   Button {
+                    radius: root.buttonRadius
                     required property var modelData
                     text: modelData.label
                     iconText: modelData.icon
@@ -988,6 +1023,7 @@ Panel {
               }
 
               Button {
+                radius: root.buttonRadius
                 id: clearFinishedButton
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
@@ -1041,6 +1077,7 @@ Panel {
 
                   trailingControl: Component {
                     PanelActionButton {
+                      radius: root.buttonRadius
                       iconText: "✕"
                       tooltipText: "Close wizard"
                       foreground: root.foreground
@@ -1073,6 +1110,7 @@ Panel {
                     spacing: Style.space(6)
 
                     Button {
+                      radius: root.buttonRadius
                       text: "Existing project"
                       fontSize: Style.font.bodySmall
                       foreground: root.foreground
@@ -1085,6 +1123,7 @@ Panel {
                     }
 
                     Button {
+                      radius: root.buttonRadius
                       text: "Custom path"
                       fontSize: Style.font.bodySmall
                       foreground: root.foreground
@@ -1104,6 +1143,7 @@ Panel {
                     Repeater {
                       model: root.projects
                       Button {
+                        radius: root.buttonRadius
                         required property var modelData
                         text: modelData.name
                         fontSize: Style.font.bodySmall
@@ -1383,6 +1423,7 @@ Panel {
                     }
 
                     Button {
+                      radius: root.buttonRadius
                       text: root.wizardDeployGenerating ? "Generating…" : (root.wizardBaseWillBeCreated ? "Generate deploy.yml + config" : "Generate deploy.yml")
                       fontSize: Style.font.bodySmall
                       foreground: root.foreground
@@ -1539,6 +1580,7 @@ Panel {
                   spacing: Style.space(8)
 
                   Button {
+                    radius: root.buttonRadius
                     text: root.wizardGenerating ? "Generating…" : "Generate provision file"
                     fontSize: Style.font.bodySmall
                     foreground: root.foreground
@@ -1568,6 +1610,7 @@ Panel {
                   }
 
                   Button {
+                    radius: root.buttonRadius
                     text: "Close"
                     fontSize: Style.font.bodySmall
                     foreground: root.foreground
@@ -1738,6 +1781,7 @@ Panel {
         model: group.actions
 
         Button {
+          radius: root.buttonRadius
           required property var modelData
           text: modelData.label
           iconText: modelData.icon || ""
@@ -1760,11 +1804,18 @@ Panel {
   component BackgroundJobCard: Column {
     id: card
     property var job: ({})
+    property bool justCopied: false
     width: parent.width
     spacing: Style.space(6)
 
     readonly property color statusColor: job.status === "running" ? root.foreground
       : (job.status === "done" ? "#4CAF50" : root.urgent)
+
+    Timer {
+      id: copiedResetTimer
+      interval: 1500
+      onTriggered: card.justCopied = false
+    }
 
     Rectangle {
       width: parent.width
@@ -1777,27 +1828,32 @@ Panel {
       Row {
         id: cardHeader
         anchors.left: parent.left
-        anchors.right: dismissButton.left
+        anchors.right: copyButton.left
         anchors.verticalCenter: parent.verticalCenter
         anchors.margins: Style.space(8)
         anchors.rightMargin: Style.space(4)
         spacing: Style.space(8)
 
         Text {
+          // Same FontAwesome "refresh" glyph as the Boot/Reboot/Restart
+          // action buttons above, kept spinning while the job runs.
           anchors.verticalCenter: parent.verticalCenter
-          text: card.job.status === "running" ? "" : (card.job.status === "done" ? "✓" : "✕")
+          text: card.job.status === "running" ? "" : (card.job.status === "done" ? "✓" : "✕")
           color: card.statusColor
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
           font.bold: true
+          transformOrigin: Item.Center
 
-          RotationAnimator on rotation {
+          RotationAnimation on rotation {
             running: card.job.status === "running"
             loops: Animation.Infinite
             from: 0
             to: 360
             duration: 900
           }
+
+          onRotationChanged: if (card.job.status !== "running" && rotation !== 0) rotation = 0
         }
 
         Column {
@@ -1827,6 +1883,28 @@ Panel {
       }
 
       PanelActionButton {
+        radius: root.buttonRadius
+        id: copyButton
+        anchors.right: dismissButton.left
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.margins: Style.space(8)
+        anchors.rightMargin: Style.space(4)
+        // FontAwesome "copy" glyph, from the same legacy PUA block as the
+        // rest of this file's verified icons.
+        iconText: card.justCopied ? "✓" : ""
+        tooltipText: card.justCopied ? "Copied" : "Copy output"
+        foreground: root.foreground
+        enabled: card.job.output.trim() !== ""
+        focusable: true
+        onClicked: {
+          root.copyBackgroundJobOutput(card.job.output)
+          card.justCopied = true
+          copiedResetTimer.restart()
+        }
+      }
+
+      PanelActionButton {
+        radius: root.buttonRadius
         id: dismissButton
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
@@ -1961,6 +2039,7 @@ Panel {
       Repeater {
         model: pathFieldRoot.suggestions
         Button {
+          radius: root.buttonRadius
           required property string modelData
           text: modelData.substring(modelData.lastIndexOf("/") + 1)
           tooltipText: modelData
