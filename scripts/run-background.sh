@@ -55,20 +55,28 @@ source "$(dirname "${BASH_SOURCE[0]}")/dispatch.sh"
 # size limit of its own, inside the long-lived, shared omarchy-shell
 # process — a misbehaving/compromised remote server (kamal talks to
 # whatever host config/deploy.yml points at) echoing enough output could
-# otherwise grow that persistent process's memory unbounded. Redirect
-# through unpredictable (mktemp, mode 0600) temp files first — cheap,
-# unlimited real capacity for dispatch_action itself, no bash-side
-# buffering — then relay only a capped amount back to our own stdout/
-# stderr, which is what the panel actually reads.
+# otherwise grow that persistent process's memory unbounded, or fill /tmp
+# if buffered through a file with no cap while it runs. Cap each stream
+# while it's still being produced: pipe stdout/stderr through `head -c`,
+# which stops reading once it hits the limit and exits, closing its end
+# of the pipe — the next write from a still-producing child (kamal) then
+# hits a closed pipe and is killed by SIGPIPE, so a runaway target can't
+# grow storage past the cap. Land the capped output in unpredictable
+# (mktemp, mode 0600) temp files rather than piping straight to our own
+# stdout/stderr, so a mid-write kill can't interleave partial lines from
+# the two streams.
 MAX_OUTPUT=65536
 out_file="$(mktemp)" || die "Could not create a temp file for output capture."
 err_file="$(mktemp)" || die "Could not create a temp file for output capture."
 trap 'rm -f "$out_file" "$err_file"' EXIT
 
-dispatch_action >"$out_file" 2>"$err_file"
+dispatch_action \
+  > >(head -c "$MAX_OUTPUT" >"$out_file") \
+  2> >(head -c "$MAX_OUTPUT" >"$err_file")
 status=$?
+wait
 
-head -c "$MAX_OUTPUT" "$out_file"
-head -c "$MAX_OUTPUT" "$err_file" >&2
+cat "$out_file"
+cat "$err_file" >&2
 
 exit "$status"
