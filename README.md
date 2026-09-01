@@ -151,13 +151,22 @@ a brand-new server. It:
    `Gemfile` have the `kamal` and `net-ssh` gems, does `ssh-add -l` show a
    loaded key, and whether a `provision` file is already there (would be
    overwritten).
-3. **Tailor** — swap size, storage path/owner, extra firewall ports beyond
-   22, Docker log rotation size/count, ulimit, and four toggles (UFW,
-   fail2ban, unattended-upgrades, SSH hardening).
-4. **Generate** — renders `templates/provision.erb` with those choices via
-   `scripts/generate-provision.sh` (plain Ruby `ERB`, no gems needed beyond
-   the stdlib) into `<target>/provision`, `chmod +x`, then rescans so the
-   project's **Provision** button lights up immediately.
+
+Target folder and Checks are shared — below them, **Deploy** and
+**Provision** are two separate tabs, since deploy.yml and the provisioning
+script are independent artifacts you might only want one of at a time.
+**Deploy** is selected by default, since a fresh project needs
+`config/deploy.yml` before provisioning even makes sense; switch to
+**Provision** freely, your Deploy fields stay put.
+
+3. **Tailor** (Provision tab) — swap size, storage path/owner, extra
+   firewall ports beyond 22, Docker log rotation size/count, ulimit, and
+   four toggles (UFW, fail2ban, unattended-upgrades, SSH hardening).
+4. **Generate** (Provision tab) — renders `templates/provision.erb` with
+   those choices via `scripts/generate-provision.sh` (plain Ruby `ERB`, no
+   gems needed beyond the stdlib) into `<target>/provision`, `chmod +x`,
+   then rescans so the project's **Provision** button lights up
+   immediately.
 
 The template itself is the user's own Scaleway/Ubuntu Kamal provisioning
 script (idempotent SSH-based steps: essentials, swap, storage dir, Docker +
@@ -167,7 +176,7 @@ off removes that step from the generated script entirely rather than
 leaving it disabled in place — re-run the wizard any time to regenerate with
 different choices; it always overwrites, never merges.
 
-### Deploy config
+### Deploy config (Deploy tab)
 
 The same wizard can also generate `config/deploy.yml` itself — the
 `provision` script needs it anyway, since it reads `servers:` from that

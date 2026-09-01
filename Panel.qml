@@ -130,6 +130,12 @@ Panel {
 
   // ---------------------------------------------------------- provision wizard
   property bool wizardOpen: false
+  // "deploy" | "provision" — Deploy config and the provisioning script are
+  // two independent artifacts this wizard can generate; each gets its own
+  // tab so the fields for one never crowd out the other, with Deploy shown
+  // first since a fresh project needs deploy.yml before provisioning even
+  // makes sense.
+  property string wizardActiveTab: "deploy"
   property string wizardTargetMode: "known"   // "known" | "custom"
   property string wizardKnownPath: ""
   property string wizardCustomPath: ""
@@ -173,6 +179,7 @@ Panel {
   onWizardDeployEnvChanged: if (root.wizardOpen) wizardCheckDebounce.restart()
 
   function openWizard() {
+    root.wizardActiveTab = "deploy"
     root.wizardResult = ""
     root.wizardResultIsError = false
     root.wizardDeployResult = ""
@@ -1112,7 +1119,7 @@ Panel {
 
                 Text {
                   width: parent.width
-                  text: "Generates a tailored `provision` script from your provisioning template — the Provision action on any project only runs if that file is there."
+                  text: "Sets up a new server: the Deploy tab generates config/deploy.yml, the Provision tab generates a tailored `provision` script — the Provision action on any project only runs if that file is there."
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall
@@ -1261,12 +1268,43 @@ Panel {
 
                 PanelSeparator { visible: root.wizardTargetValid; foreground: root.foreground }
 
+                // ---------- Tabs ----------
+                Row {
+                  width: parent.width
+                  spacing: Style.space(6)
+                  visible: root.wizardTargetValid
+
+                  Button {
+                    radius: root.buttonRadius
+                    text: "Deploy"
+                    fontSize: Style.font.bodySmall
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    bordered: true
+                    focusable: true
+                    active: root.wizardActiveTab === "deploy"
+                    onClicked: root.wizardActiveTab = "deploy"
+                  }
+
+                  Button {
+                    radius: root.buttonRadius
+                    text: "Provision"
+                    fontSize: Style.font.bodySmall
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    bordered: true
+                    focusable: true
+                    active: root.wizardActiveTab === "provision"
+                    onClicked: root.wizardActiveTab = "provision"
+                  }
+                }
+
                 // ---------- Deploy config ----------
                 Column {
                   id: deployConfigGroup
                   width: parent.width
                   spacing: Style.space(10)
-                  visible: root.wizardTargetValid
+                  visible: root.wizardTargetValid && root.wizardActiveTab === "deploy"
 
                   readonly property var webHosts: (deployWebHostsField.text || "").split(",")
                     .map(function(s) { return s.trim() }).filter(function(s) { return s !== "" })
@@ -1480,12 +1518,11 @@ Panel {
                   }
                 }
 
-                PanelSeparator { foreground: root.foreground }
-
-                // ---------- Tailor ----------
+                // ---------- Tailor (Provision tab) ----------
                 Column {
                   width: parent.width
                   spacing: Style.space(10)
+                  visible: root.wizardTargetValid && root.wizardActiveTab === "provision"
 
                   PanelSectionHeader { text: "TAILOR"; foreground: root.foreground; fontFamily: root.fontFamily }
 
@@ -1594,13 +1631,8 @@ Panel {
                     fontFamily: root.fontFamily
                     onClicked: checked = !checked
                   }
-                }
 
-                PanelSeparator { foreground: root.foreground }
-
-                Row {
-                  width: parent.width
-                  spacing: Style.space(8)
+                  PanelSeparator { foreground: root.foreground }
 
                   Button {
                     radius: root.buttonRadius
@@ -1632,6 +1664,23 @@ Panel {
                     }
                   }
 
+                  Text {
+                    visible: root.wizardResult !== ""
+                    width: parent.width
+                    text: root.wizardResult
+                    color: root.wizardResultIsError ? root.urgent : root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    wrapMode: Text.WordWrap
+                  }
+                }
+
+                PanelSeparator { foreground: root.foreground }
+
+                Row {
+                  width: parent.width
+                  spacing: Style.space(8)
+
                   Button {
                     radius: root.buttonRadius
                     text: "Close"
@@ -1642,17 +1691,6 @@ Panel {
                     focusable: true
                     onClicked: root.closeWizard()
                   }
-                }
-
-                Text {
-                  visible: root.wizardResult !== ""
-                  width: parent.width
-                  text: root.wizardResult
-                  color: root.wizardResultIsError ? root.urgent : root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  wrapMode: Text.WordWrap
-                  bottomPadding: Style.space(8)
                 }
               }
             }
