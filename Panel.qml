@@ -1721,13 +1721,23 @@ Panel {
       }
     }
 
-    Column {
+    Grid {
+      id: envGrid
       width: parent.width
-      spacing: Style.space(4)
+      // A single deploy.yml (one row) still reads best as its own full-width
+      // line; only once there's more than one destination does splitting
+      // into two columns actually save vertical space worth the tradeoff.
+      columns: (block.project.environments || []).length > 1 ? 2 : 1
+      columnSpacing: Style.space(12)
+      rowSpacing: Style.space(4)
+
+      readonly property real cellWidth: envGrid.columns > 1
+        ? (envGrid.width - envGrid.columnSpacing * (envGrid.columns - 1)) / envGrid.columns
+        : envGrid.width
 
       Repeater {
         model: block.project.environments || []
-        TargetRow { width: parent.width; env: modelData }
+        TargetRow { width: envGrid.cellWidth; env: modelData }
       }
     }
   }

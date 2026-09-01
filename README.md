@@ -65,7 +65,8 @@ shell`.
   both a `Gemfile` and a `package.json`, e.g. a Rails app with a JS asset
   pipeline), one checkbox per destination (`default` for `config/deploy.yml`,
   `<env>` for each
-  `config/deploy.<env>.yml`).
+  `config/deploy.<env>.yml`) — laid out as a two-column grid once a project
+  has more than one destination, one column otherwise.
   **Select all** / **Clear** toggle everything at once. As soon as anything
   is checked, a **SELECTED (N)** chip row appears (click a chip's ✕ to
   uncheck just that one) followed by the shared action bar — every button
