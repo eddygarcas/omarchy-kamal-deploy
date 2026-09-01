@@ -356,7 +356,7 @@ Panel {
     var jobId = "job" + (root.backgroundJobSeq++)
     var job = { id: jobId, label: labelText, status: "running", output: "", exitCode: null }
     root.backgroundJobs = [job].concat(root.backgroundJobs)
-    var proc = backgroundJobComponent.createObject(root, { jobId: jobId, command: args })
+    var proc = backgroundJobComponent.createObject(root, { jobId: jobId, jobLabel: labelText, command: args })
     root.backgroundProcs[jobId] = proc
     proc.running = true
   }
@@ -416,11 +416,32 @@ Panel {
     root.backgroundJobs = root.backgroundJobs.filter(function(j) { return j.status === "running" })
   }
 
+  // A background job runs with no terminal and no panel requirement — the
+  // panel might well be closed by the time it finishes. Fire a desktop
+  // notification so the user knows to reopen it and check the result card,
+  // rather than relying on a spinner that's no longer on screen. notify-send
+  // takes plain positional args (no shell involved), so job.label — built
+  // from project/env/action names that ultimately come from a deploy.yml
+  // the user placed under their own search folders — needs no extra
+  // escaping here, same as every other execDetached call in this file.
+  function notifyBackgroundJobResult(job) {
+    var ok = job.status === "done"
+    var args = [
+      "notify-send", "--app-name=Kamal Deploy",
+      "--icon=" + (ok ? "dialog-information" : "dialog-error")
+    ]
+    if (!ok) args.push("--urgency=critical")
+    args.push(ok ? "Kamal Deploy — done" : "Kamal Deploy — failed")
+    args.push(job.label + (ok ? "" : (" (exit " + job.exitCode + ")")) + " — check the panel for output.")
+    Quickshell.execDetached(args)
+  }
+
   Component {
     id: backgroundJobComponent
     Process {
       id: bgProc
       property string jobId: ""
+      property string jobLabel: ""
       property string capturedOut: ""
       property string capturedErr: ""
       stdout: StdioCollector { waitForEnd: true; onStreamFinished: bgProc.capturedOut = text }
@@ -430,11 +451,13 @@ Panel {
         if (bgProc.capturedErr.trim() !== "") {
           combined += (combined !== "" && combined.slice(-1) !== "\n" ? "\n" : "") + bgProc.capturedErr
         }
+        var status = exitCode === 0 ? "done" : "failed"
         root.updateBackgroundJob(bgProc.jobId, {
-          status: exitCode === 0 ? "done" : "failed",
+          status: status,
           output: root.stripAnsi(combined).trim(),
           exitCode: exitCode
         })
+        root.notifyBackgroundJobResult({ label: bgProc.jobLabel, status: status, exitCode: exitCode })
         delete root.backgroundProcs[bgProc.jobId]
         bgProc.destroy()
       }

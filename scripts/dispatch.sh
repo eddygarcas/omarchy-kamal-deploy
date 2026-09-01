@@ -5,7 +5,39 @@
 # and `die`, and set ACTION/EXTRA/DEST/ENV/PROJECT_DIR, before calling
 # dispatch_action.
 
+# True if $1 is a kamal action that builds and/or pushes a Docker image
+# from *this* machine (kamal's build step) rather than just talking to the
+# remote host's own docker daemon over SSH like every other action does —
+# the one place a stopped local Docker actually breaks a Kamal Deploy
+# action. `provision` is a plain ruby/SSH script, not kamal, and doesn't
+# touch local docker either, so it's deliberately not included here.
+action_requires_docker() {
+  case "$1" in
+    setup|deploy) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Local Docker must be reachable before a build/push action runs, or the
+# real failure a few seconds into `kamal deploy` is a confusing docker/API
+# error rather than "start Docker". Fires a best-effort desktop
+# notification (silently skipped if notify-send isn't there, same as
+# every other such call in this plugin) and calls the caller's own `die` —
+# which either pauses a real terminal or just exits with status 1,
+# depending on which of run.sh/run-background.sh sourced this file — so a
+# background job comes back "failed" with a clear reason instead of
+# whatever kamal itself would have printed.
+require_docker_running() {
+  docker info >/dev/null 2>&1 && return 0
+  notify-send --app-name="Kamal Deploy" --icon=dialog-error --urgency=critical \
+    "Kamal Deploy — Docker not running" \
+    "Start Docker, then retry ${ACTION:-this action}." >/dev/null 2>&1 || true
+  die "Docker isn't running — start it (e.g. 'sudo systemctl start docker') and try again."
+}
+
 dispatch_action() {
+  action_requires_docker "$ACTION" && require_docker_running
+
   case "$ACTION" in
     provision)
       if [[ ! -f "$PROJECT_DIR/provision" ]]; then

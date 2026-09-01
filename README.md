@@ -98,7 +98,11 @@ accessory action except its own Logs run in the background — a spinner
 appears under **RESULTS** while it's in flight, then the real command's
 output (and exit status) renders in a scrollable console-styled card you
 can dismiss whenever you're done reading it, or clear in bulk once a batch
-finishes. A handful of actions still open a real terminal, because they
+finishes. Each one also fires a desktop notification (`notify-send`, app
+name "Kamal Deploy") the moment it finishes — done or failed — since the
+panel is often closed by then; it names the project/env/action and, on
+failure, the exit code, and just points you back to the panel rather than
+repeating the full output. A handful of actions still open a real terminal, because they
 either need genuine interactive input or never finish on their own: Tail
 logs and an accessory's own Logs (`-f`, streams forever), Rails console and
 Bash shell (`kamal app exec -i`, a real interactive session), and Rollback
@@ -114,7 +118,21 @@ scan) — a background run just calls `scripts/run-background.sh` (no
 terminal, no colors, no "press any key" pause, plain captured
 stdout/stderr) instead of `scripts/run.sh`; both share the actual
 action→command mapping from `scripts/dispatch.sh` so the two paths can't
-drift apart on what a given action actually runs.
+drift apart on what a given action actually runs. Both also share
+`scripts/ensure-kamal.sh`: if `kamal` isn't on `PATH` yet, it runs `gem
+install kamal` first — quietly, since only whether the actual action
+that follows succeeds is worth showing, not the install itself — before
+falling back to the original "not on PATH" error if that didn't fix it.
+
+Setup and Deploy — the two actions that build and push a Docker image
+from this machine, unlike every other action which only talks to the
+remote host's own docker daemon over SSH — first check `docker info`.
+If local Docker isn't reachable, the action stops right there (no `kamal`
+process ever spawned) and a desktop notification tells you to start
+Docker and retry, instead of failing a few seconds later on a confusing
+docker/API error. This lives in `dispatch_action` itself
+(`action_requires_docker` in `scripts/dispatch.sh`), so it applies no
+matter which of run.sh/run-background.sh ends up running the action.
 
 ## Provision Wizard
 
@@ -206,7 +224,17 @@ to one app to generalize; add it back the same way if you use it.)
 
 - Requires `kamal`, `jq`, `find`, `md5sum`, `awk`, and `ruby` (stdlib `erb` +
   `json`, no gems) on `PATH` (all standard on an Omarchy/Arch install with
-  Kamal already set up).
+  Kamal already set up). If `kamal` isn't found when an action runs, both
+  `scripts/run.sh` and `scripts/run-background.sh` try `gem install kamal`
+  once (quietly — its own output isn't shown, only whether `kamal` resolves
+  on `PATH` afterwards) before falling back to the "not on PATH" error.
+- Every background action fires one `notify-send` call when it finishes
+  (standard on any Omarchy/Arch install, part of `libnotify`) — silently
+  skipped if it's missing, the same way every other best-effort call in
+  this plugin degrades.
+- Setup and Deploy additionally require the `docker` CLI on `PATH` and a
+  reachable Docker daemon (`docker info`) — checked before either one
+  spawns `kamal`, since both build and push an image from this machine.
 - Runs `bash scripts/discover.sh <folders...>` to scan the filesystem and
   cache results at `$XDG_RUNTIME_DIR/eduard.kamal-deploy/targets.json` (or
   `/tmp/eduard.kamal-deploy-$UID` if `$XDG_RUNTIME_DIR` isn't set — that
@@ -272,6 +300,7 @@ the widget from your bar layout. It does **not** revert the
 | `Panel.qml`                     | Bar icon + task-list panel UI + Provision Wizard                |
 | `scripts/discover.sh`           | Scans search folders for `config/deploy*.yml`, prints/caches JSON |
 | `scripts/cache-dir.sh`          | Resolves + validates the targets-cache directory, sourced by the three scripts below |
+| `scripts/ensure-kamal.sh`       | Installs the `kamal` gem if it's missing, sourced by `run.sh` and `run-background.sh` |
 | `scripts/dispatch.sh`           | Shared action→`kamal`/`ruby` command mapping, sourced by both scripts below |
 | `scripts/run.sh`                | Resolves a clicked target, runs it in a real terminal (interactive/streaming actions) |
 | `scripts/run-background.sh`     | Same resolution, runs in the background instead, output captured for the panel |
