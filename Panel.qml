@@ -40,6 +40,13 @@ Panel {
   // of that system setting, while still growing with it if the user prefers
   // more rounding overall.
   readonly property int buttonRadius: Math.max(Style.cornerRadius, Style.space(8))
+  // Shared between the wizard's tab strip and its content card so the
+  // active tab's fill and the card's own fill are the exact same value —
+  // that color match, not a border, is what sells the "attached tab"
+  // illusion where the active tab's bottom edge visually merges into the
+  // card below it.
+  readonly property color wizardCardColor: Qt.rgba(0, 0, 0, 0.18)
+  readonly property color wizardCardBorder: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.22)
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string pluginDir: home + "/.config/omarchy/plugins/eduard.kamal-deploy"
@@ -1269,42 +1276,73 @@ Panel {
                 PanelSeparator { visible: root.wizardTargetValid; foreground: root.foreground }
 
                 // ---------- Tabs ----------
-                Row {
+                Column {
                   width: parent.width
-                  spacing: Style.space(6)
+                  spacing: 0
                   visible: root.wizardTargetValid
 
-                  Button {
-                    radius: root.buttonRadius
-                    text: "Deploy"
-                    fontSize: Style.font.bodySmall
-                    foreground: root.foreground
-                    fontFamily: root.fontFamily
-                    bordered: true
-                    focusable: true
-                    active: root.wizardActiveTab === "deploy"
-                    onClicked: root.wizardActiveTab = "deploy"
+                  Row {
+                    spacing: Style.space(4)
+
+                    WizardTab {
+                      label: "Deploy"
+                      active: root.wizardActiveTab === "deploy"
+                      onClicked: root.wizardActiveTab = "deploy"
+                    }
+
+                    WizardTab {
+                      label: "Provision"
+                      active: root.wizardActiveTab === "provision"
+                      onClicked: root.wizardActiveTab = "provision"
+                    }
                   }
 
-                  Button {
-                    radius: root.buttonRadius
-                    text: "Provision"
-                    fontSize: Style.font.bodySmall
-                    foreground: root.foreground
-                    fontFamily: root.fontFamily
-                    bordered: true
-                    focusable: true
-                    active: root.wizardActiveTab === "provision"
-                    onClicked: root.wizardActiveTab = "provision"
-                  }
-                }
+                  // Same layered-inset technique as WizardTab, mirrored: the
+                  // inner fill is flush with the outer's top edge (no top
+                  // margin) so no border line ever shows there, whichever
+                  // tab is active — only left/right/bottom get a visible
+                  // rim, matching the tab that's sitting flush above it.
+                  Item {
+                    id: tabCard
+                    width: parent.width
+                    height: tabContent.implicitHeight + Style.space(24)
+
+                    readonly property real bw: Math.max(1, Style.normalBorderWidth)
+
+                    Rectangle {
+                      anchors.fill: parent
+                      color: root.wizardCardBorder
+                      topLeftRadius: 0
+                      topRightRadius: 0
+                      bottomLeftRadius: root.buttonRadius
+                      bottomRightRadius: root.buttonRadius
+                    }
+
+                    Rectangle {
+                      anchors.fill: parent
+                      anchors.topMargin: 0
+                      anchors.leftMargin: tabCard.bw
+                      anchors.rightMargin: tabCard.bw
+                      anchors.bottomMargin: tabCard.bw
+                      color: root.wizardCardColor
+                      topLeftRadius: 0
+                      topRightRadius: 0
+                      bottomLeftRadius: Math.max(0, root.buttonRadius - tabCard.bw)
+                      bottomRightRadius: Math.max(0, root.buttonRadius - tabCard.bw)
+                    }
+
+                    Column {
+                      id: tabContent
+                      anchors.fill: parent
+                      anchors.margins: Style.space(12)
+                      spacing: Style.space(14)
 
                 // ---------- Deploy config ----------
                 Column {
                   id: deployConfigGroup
                   width: parent.width
                   spacing: Style.space(10)
-                  visible: root.wizardTargetValid && root.wizardActiveTab === "deploy"
+                  visible: root.wizardActiveTab === "deploy"
 
                   readonly property var webHosts: (deployWebHostsField.text || "").split(",")
                     .map(function(s) { return s.trim() }).filter(function(s) { return s !== "" })
@@ -1522,7 +1560,7 @@ Panel {
                 Column {
                   width: parent.width
                   spacing: Style.space(10)
-                  visible: root.wizardTargetValid && root.wizardActiveTab === "provision"
+                  visible: root.wizardActiveTab === "provision"
 
                   PanelSectionHeader { text: "TAILOR"; foreground: root.foreground; fontFamily: root.fontFamily }
 
@@ -1673,6 +1711,9 @@ Panel {
                     font.pixelSize: Style.font.bodySmall
                     wrapMode: Text.WordWrap
                   }
+                }
+                    } // tabContent
+                  } // content card
                 }
 
                 PanelSeparator { foreground: root.foreground }
@@ -2153,6 +2194,69 @@ Panel {
       font.pixelSize: Style.font.bodySmall
       wrapMode: Text.WordWrap
       width: check.width - check.spacing - Style.space(14)
+    }
+  }
+
+  // A classic attached tab: rounded top corners, square bottom. Plain
+  // Rectangle.border paints all four sides uniformly, so there's no way to
+  // ask it for "bordered except the bottom" directly — instead this layers
+  // two rounded rectangles, an outer one in the border color and an inner
+  // one (inset by the border width) in the fill color, same technique
+  // BorderSurface/BorderOverlay use elsewhere in this kit. The active tab
+  // insets its fill on top/left/right only, leaving the bottom flush with
+  // the outer rectangle's edge — since that fill color is the exact same
+  // root.wizardCardColor the content card below uses, and the tab row sits
+  // directly on the card with zero spacing, the "border" along that one
+  // edge visually disappears, reading as one continuous shape. An inactive
+  // tab insets on all four sides instead, so it stays a fully closed pill.
+  component WizardTab: Item {
+    id: tab
+    property string label: ""
+    property bool active: false
+    signal clicked()
+
+    readonly property real bw: Math.max(1, Style.normalBorderWidth)
+
+    implicitWidth: tabText.implicitWidth + Style.space(28)
+    implicitHeight: tabText.implicitHeight + Style.space(16)
+
+    Rectangle {
+      anchors.fill: parent
+      color: root.wizardCardBorder
+      topLeftRadius: root.buttonRadius
+      topRightRadius: root.buttonRadius
+      bottomLeftRadius: 0
+      bottomRightRadius: 0
+    }
+
+    Rectangle {
+      anchors.fill: parent
+      anchors.topMargin: tab.bw
+      anchors.leftMargin: tab.bw
+      anchors.rightMargin: tab.bw
+      anchors.bottomMargin: tab.active ? 0 : tab.bw
+      color: tab.active ? root.wizardCardColor : "transparent"
+      topLeftRadius: Math.max(0, root.buttonRadius - tab.bw)
+      topRightRadius: Math.max(0, root.buttonRadius - tab.bw)
+      bottomLeftRadius: 0
+      bottomRightRadius: 0
+    }
+
+    Text {
+      id: tabText
+      anchors.centerIn: parent
+      text: tab.label
+      color: tab.active ? root.foreground : root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      font.bold: tab.active
+      textFormat: Text.PlainText
+    }
+
+    MouseArea {
+      anchors.fill: parent
+      cursorShape: Qt.PointingHandCursor
+      onClicked: tab.clicked()
     }
   }
 }

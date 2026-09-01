@@ -157,7 +157,10 @@ Target folder and Checks are shared — below them, **Deploy** and
 script are independent artifacts you might only want one of at a time.
 **Deploy** is selected by default, since a fresh project needs
 `config/deploy.yml` before provisioning even makes sense; switch to
-**Provision** freely, your Deploy fields stay put.
+**Provision** freely, your Deploy fields stay put. Styled as classic
+attached tabs — rounded on top, flat on the bottom — with the active one
+flush against the card holding its fields below it, and the inactive one
+a separate closed pill beside it.
 
 3. **Tailor** (Provision tab) — swap size, storage path/owner, extra
    firewall ports beyond 22, Docker log rotation size/count, ulimit, and
