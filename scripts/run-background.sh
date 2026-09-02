@@ -40,7 +40,7 @@ IFS=$'\x01' read -r PROJECT_DIR PROJECT_NAME ENV LABEL <<<"$(read_cache_file | j
 cd "$PROJECT_DIR" || die "Could not enter $PROJECT_DIR"
 
 source "$(dirname "${BASH_SOURCE[0]}")/ensure-kamal.sh"
-ensure_kamal_installed || die "kamal is not on PATH in $PROJECT_DIR, and 'gem install kamal' didn't fix it (check your Ruby/bundler setup)."
+ensure_kamal_installed || die "kamal is not on PATH in $PROJECT_DIR — install it yourself (e.g. 'gem install kamal' or via your Gemfile/bundler) and try again."
 
 DEST=()
 [[ -n "$ENV" ]] && DEST=(-d "$ENV")

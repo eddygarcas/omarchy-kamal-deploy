@@ -120,10 +120,11 @@ terminal, no colors, no "press any key" pause, plain captured
 stdout/stderr) instead of `scripts/run.sh`; both share the actual
 action→command mapping from `scripts/dispatch.sh` so the two paths can't
 drift apart on what a given action actually runs. Both also share
-`scripts/ensure-kamal.sh`: if `kamal` isn't on `PATH` yet, it runs `gem
-install kamal` first — quietly, since only whether the actual action
-that follows succeeds is worth showing, not the install itself — before
-falling back to the original "not on PATH" error if that didn't fix it.
+`scripts/ensure-kamal.sh`, which only checks whether `kamal` is on
+`PATH` — it deliberately doesn't try to install it for you (that would
+mean fetching and running whatever's currently published to RubyGems
+with no version pin and no confirmation), so a missing `kamal` fails
+with a clear error telling you to install it yourself.
 
 Setup and Deploy — the two actions that build and push a Docker image
 from this machine, unlike every other action which only talks to the
@@ -238,9 +239,9 @@ to one app to generalize; add it back the same way if you use it.)
 - Requires `kamal`, `jq`, `find`, `md5sum`, `awk`, and `ruby` (stdlib `erb` +
   `json`, no gems) on `PATH` (all standard on an Omarchy/Arch install with
   Kamal already set up). If `kamal` isn't found when an action runs, both
-  `scripts/run.sh` and `scripts/run-background.sh` try `gem install kamal`
-  once (quietly — its own output isn't shown, only whether `kamal` resolves
-  on `PATH` afterwards) before falling back to the "not on PATH" error.
+  `scripts/run.sh` and `scripts/run-background.sh` fail with a clear error
+  rather than installing it for you — the plugin never runs `gem install`
+  on your behalf.
 - Every background action fires one `notify-send` call when it finishes
   (standard on any Omarchy/Arch install, part of `libnotify`) — silently
   skipped if it's missing, the same way every other best-effort call in
